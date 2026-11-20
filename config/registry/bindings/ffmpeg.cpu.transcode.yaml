@@ -8,7 +8,7 @@ inputs:
   - {role: clip, media_type: video, required: true}
 outputs:
   - {role: video, media_type: video}
-determinism: bitwise        # UNVERIFIED for multithreaded encoders; confirm before relying on it
+determinism: perceptual     # UNVERIFIED: bitwise reproducibility of multithreaded encoders cannot be confirmed without execution
 execution_only: [threads]
 resources:
   gpu: none                 # no GPU use by definition; vram is therefore not declared

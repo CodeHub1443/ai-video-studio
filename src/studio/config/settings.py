@@ -331,6 +331,33 @@ class FfmpegConfig(_Section):
     ffprobe: str = "ffprobe"
 
 
+class BreakerConfig(_Section):
+    """Crash-loop breaker thresholds (UD-7): ``k`` counted interrupts within ``window_s`` seconds.
+
+    PROVISIONAL and NOT CALIBRATED (decision I-8). The numbers live ONLY in ``config/studio.toml``
+    (``[recovery.breaker]``); there are deliberately no code defaults. While a value is ``None`` the
+    consumer must fail closed (treat it as K = 1: any counted interrupt pauses the queue). ``provisional``
+    stays true until a calibration run exists.
+    """
+
+    k: int | None = Field(default=None, ge=1)
+    window_s: int | None = Field(default=None, gt=0)
+    provisional: bool = True
+
+    @field_validator("k", "window_s", mode="before")
+    @classmethod
+    def _not_a_bool(cls, v: object) -> object:
+        if isinstance(v, bool):
+            raise ValueError("must be an integer, not a boolean")
+        return v
+
+
+class RecoveryConfig(_Section):
+    """Recovery settings that belong in configuration, never in the domain (design C.6)."""
+
+    breaker: BreakerConfig = Field(default_factory=BreakerConfig)
+
+
 class _OverlayToml(TomlConfigSettingsSource):
     """TOML source that refuses ``env`` so a file can never contradict the selected environment."""
 
@@ -373,6 +400,7 @@ class StudioSettings(BaseSettings):
     comfyui: ComfyUIConfig = Field(default_factory=ComfyUIConfig)
     ltx: LtxConfig = Field(default_factory=LtxConfig)
     ffmpeg: FfmpegConfig = Field(default_factory=FfmpegConfig)
+    recovery: RecoveryConfig = Field(default_factory=RecoveryConfig)
 
     @field_validator("env", mode="before")
     @classmethod

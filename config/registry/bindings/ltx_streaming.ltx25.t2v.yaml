@@ -16,7 +16,8 @@ features:
   resume: true               # stage-1 artifact reuse (--reuse-stage1)
   preview: true
 determinism: perceptual
-execution_only: [SYNC_S1, TEMP, TMP, HF_HOME]   # UNVERIFIED: that SYNC_S1 does not change output
+execution_only: [SYNC_S1]   # UNVERIFIED: that SYNC_S1 does not change output
+managed_environment: [TEMP, TMP, HF_HOME]   # set by the executor; never task parameters, never hashed
 resources:
   gpu: exclusive
   # Memory needs are UNKNOWN (null): the earlier 5.5 / 16 / 24 GB figures were guesses and were removed.

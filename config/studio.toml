@@ -28,6 +28,15 @@ hardware_profile = "rtx3050-6gb"   # -> config/hardware/<name>.toml
 # <comfyui_output_dir>\studio, LTX writes videos\studio and {latents,logs,previews}\studio-*, the studio
 # writes outputs\studio. Keys such as output_subdir, studio_category and name_prefix are rejected.
 
+[recovery.breaker]
+# Crash-loop circuit breaker (UD-7): K counted interrupts within a window of window_s seconds pause the
+# queue and quarantine the binding. PROVISIONAL, NOT CALIBRATED (decision I-8): starting values only.
+# They live here, never in the domain. Unlike the other values in this file these are NOT built-in
+# defaults: the code has none. Unset (no value configured) means fail-closed: K = 1.
+k = 3
+window_s = 1800                    # 30 minutes
+provisional = true
+
 [comfyui]
 host = "127.0.0.1"
 port = 8188
