@@ -20,6 +20,7 @@ set ``env``. Output namespaces are pinned in ``studio.config.namespaces`` and ar
 from __future__ import annotations
 
 import os
+import tomllib
 from collections.abc import Mapping
 from enum import StrEnum
 from functools import lru_cache
@@ -48,6 +49,9 @@ from studio.config.paths import (
 DEFAULT_WORKSPACE_ROOT = Path(r"E:\AI_VIDEO_STUDIO")
 DEFAULT_LTX_REPO = Path(r"E:\Dev\ltx25-igpu-streaming")
 DEFAULT_LTX_MODELS = Path(r"E:\AI-Data\LTX25")
+PINNED_AI_DATA_ROOT = Path(
+    r"E:\AI-Data"
+)  # every model store lives below it; test sandboxes never may
 DEFAULT_COMFYUI_PORT = 8188  # the real, user-run ComfyUI; env=test must never be pointed at it
 
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
@@ -456,6 +460,52 @@ class StudioSettings(BaseSettings):
         return build_access_policy(self.paths)
 
 
+def _base_config_roots() -> tuple[dict[str, Path], str | None]:
+    """Every path of the BASE configuration (``studio.toml`` alone), plus a problem text if it is unusable.
+
+    No overlay, no ``STUDIO_*`` variable and no init kwarg can influence this: a test must not be able to
+    shrink the set of real locations it is protected from. No config directory or no ``studio.toml`` means
+    the built-in defaults apply (already protected). A file that exists but cannot be read, parsed or
+    validated fails closed.
+    """
+    try:
+        base = config_dir() / "studio.toml"
+    except ConfigDirNotFound:
+        return {}, None
+    except Exception as exc:  # noqa: BLE001 - fail closed on any configuration-directory problem
+        return {}, f"cannot locate the base configuration to protect its real roots: {exc}"
+    try:
+        text = base.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}, None
+    except (OSError, ValueError) as exc:
+        return {}, f"cannot read the base configuration {base} to protect its real roots: {exc}"
+    try:
+        table = tomllib.loads(text).get("paths", {})
+        if not isinstance(table, dict):
+            raise ValueError("'paths' must be a table")
+        paths = PathsConfig.model_validate(table)
+    except ValueError as exc:  # TOMLDecodeError and pydantic ValidationError are ValueErrors
+        return {}, f"invalid base configuration {base}; cannot protect its real roots: {exc}"
+    return dict(paths.all_paths), None
+
+
+def _protected_real_roots() -> tuple[dict[str, Path], str | None]:
+    """Locations an env=test sandbox may never overlap: the built-in real locations, the pinned
+    AI-Data root (drive E) and every path of the base configuration. The second item is a fail-closed
+    problem text."""
+    protected: dict[str, Path] = {
+        "real workspace": DEFAULT_WORKSPACE_ROOT,
+        "protected LTX repository": DEFAULT_LTX_REPO,
+        "real LTX weights": DEFAULT_LTX_MODELS,
+        "pinned AI-Data root": PINNED_AI_DATA_ROOT,
+    }
+    base, problem = _base_config_roots()
+    for name, path in base.items():
+        protected[f"base-configured paths.{name}"] = path
+    return protected, problem
+
+
 def _test_isolation_problems(s: StudioSettings) -> list[str]:
     """env=test: every location must be inside the explicit sandbox allowlist.
 
@@ -470,11 +520,9 @@ def _test_isolation_problems(s: StudioSettings) -> list[str]:
         problems.append(
             f"test_sandbox_root must be at least two levels below the drive root: {sandbox}"
         )
-    protected = {
-        "real workspace": DEFAULT_WORKSPACE_ROOT,
-        "protected LTX repository": DEFAULT_LTX_REPO,
-        "real LTX weights": DEFAULT_LTX_MODELS,
-    }
+    protected, protect_problem = _protected_real_roots()
+    if protect_problem is not None:
+        problems.append(protect_problem)
     for label, real in protected.items():
         if overlaps(sandbox, real):
             problems.append(f"test_sandbox_root overlaps the {label}")
