@@ -33,14 +33,14 @@ from studio.domain.recovery import (
 )
 from studio.domain.states import (
     ACTIVE_JOB_STATE_FOR_ATTEMPT,
+    ATTEMPT_TRANSITIONS,
+    JOB_TRANSITIONS,
     ApprovalState,
     AttemptState,
     GateState,
     JobState,
     ShotState,
     TakeState,
-    ATTEMPT_TRANSITIONS,
-    JOB_TRANSITIONS,
 )
 from studio.domain.workflow import (
     Approval,

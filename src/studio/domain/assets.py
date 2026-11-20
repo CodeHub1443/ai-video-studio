@@ -19,7 +19,7 @@ from enum import StrEnum
 from typing import Any
 
 from studio.domain.canonical import ParamMap, freeze_params
-from studio.domain.errors import ValidationIssue, UnresolvedSpecError, fail
+from studio.domain.errors import UnresolvedSpecError, ValidationIssue, fail
 from studio.domain.graph import topological_order
 from studio.domain.ids import (
     ROLE_RE,
