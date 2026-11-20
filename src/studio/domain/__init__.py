@@ -20,8 +20,10 @@ from studio.domain.assets import (
 )
 from studio.domain.canonical import (
     CANONICAL_VERSION,
+    SAFE_INT_MAX,
     canonical_bytes,
     canonical_json,
+    format_number,
     freeze_params,
 )
 from studio.domain.errors import (
@@ -86,6 +88,7 @@ from studio.domain.workflow import (
 __all__ = [
     "ALL_TABLES",
     "CANONICAL_VERSION",
+    "SAFE_INT_MAX",
     "DEFAULT_MAX_INFRASTRUCTURE_RETRIES",
     "PERMITTED_RECOVERY",
     "RECOVERY_RULES",
@@ -144,6 +147,7 @@ __all__ = [
     "WorkflowGraph",
     "canonical_bytes",
     "canonical_json",
+    "format_number",
     "check_all_tables",
     "check_metadata_for",
     "check_parameter_partition",
