@@ -24,18 +24,25 @@ from studio.domain.assets import (
     validate_lineage,
 )
 from studio.domain.errors import ValidationIssue, raise_if_issues
+from studio.domain.fingerprint import stage_key
 from studio.domain.production import Project, Scene, Shot, Take
 from studio.domain.recovery import (
     ATTEMPT_ORIGIN_KIND,
+    AttemptEndCause,
     AttemptOrigin,
     TakeOrigin,
     is_recovery_permitted,
+    never_started,
+    resume_chain_depth,
+    resumes_used,
+    retries_used,
 )
 from studio.domain.states import (
     ACTIVE_JOB_STATE_FOR_ATTEMPT,
     ATTEMPT_TRANSITIONS,
     JOB_TRANSITIONS,
     ApprovalState,
+    AssetState,
     AttemptState,
     GateState,
     JobState,
@@ -109,7 +116,14 @@ def _contiguous(
 
 def validate_snapshot(snapshot: DomainSnapshot) -> tuple[ValidationIssue, ...]:
     issues: list[ValidationIssue] = []
-    for check in (_check_ids, _check_production, _check_assets, _check_workflow, _check_cross):
+    for check in (
+        _check_ids,
+        _check_production,
+        _check_assets,
+        _check_workflow,
+        _check_recovery,
+        _check_cross,
+    ):
         check(snapshot, issues)
     return tuple(issues)
 
@@ -487,6 +501,14 @@ def _check_workflow(s: DomainSnapshot, issues: list[ValidationIssue]) -> None:
                     f"{where}.output_version_ids",
                     f"unknown version {version_id}",
                 )
+        for version_id in attempt.artifact_version_ids:
+            if version_id not in versions:
+                _issue(
+                    issues,
+                    "ref.missing",
+                    f"{where}.artifact_version_ids",
+                    f"unknown version {version_id}",
+                )
         if (
             attempt.resume_artifact_version_id is not None
             and attempt.resume_artifact_version_id not in versions
@@ -581,17 +603,27 @@ def _check_job_attempts(
         _issue(issues, "state.attempts", where, "more than one non-terminal attempt")
     if live and ordered[-1] is not live[0]:
         _issue(issues, "state.attempts", where, "a non-terminal attempt must be the latest one")
-    if (
-        sum(1 for a in ordered if a.origin is not AttemptOrigin.INITIAL)
-        > job.max_infrastructure_retries
-    ):
-        _issue(
-            issues,
-            "recovery.budget",
-            where,
-            f"more than {job.max_infrastructure_retries} retry/resume attempts",
-        )
     last = ordered[-1] if ordered else None
+
+    if job.state is JobState.FAILED:
+        attempt_failed = last is not None and last.state in (
+            AttemptState.FAILED,
+            AttemptState.INTERRUPTED,
+        )
+        if not attempt_failed and job.failure is None:
+            _issue(
+                issues,
+                "state.job_failure",
+                where,
+                "a failed job whose latest attempt did not fail or get interrupted needs a failure record",
+            )
+        if attempt_failed and job.failure is not None:
+            _issue(
+                issues,
+                "state.job_failure",
+                where,
+                "a failure record is only for a job that failed without a failing attempt",
+            )
 
     if job.state in (JobState.QUEUED, JobState.BLOCKED) and ordered:
         _issue(issues, "state.job_attempts", where, f"a {job.state} job has no attempts")
@@ -628,6 +660,133 @@ def _check_job_attempts(
         )
     if job.state in (JobState.RUNNING, JobState.INGESTING) and last is None:
         _issue(issues, "state.job_attempts", where, f"a {job.state} job needs an attempt")
+
+
+# ---------------------------------------------------------------- recovery policy (UD-4, UD-7)
+
+
+def _check_recovery(s: DomainSnapshot, issues: list[ValidationIssue]) -> None:
+    """Derived-counter checks against the policy snapshot on each job. Nothing here assumes a default limit:
+    a limit of ``None`` means the kind is never automatic, so no automatic attempt of it may exist."""
+    versions = {x.version_id: x for x in s.asset_versions}
+    attempts_by_job: dict[str, list[Attempt]] = defaultdict(list)
+    for attempt in s.attempts:
+        attempts_by_job[attempt.job_id].append(attempt)
+
+    for job in s.jobs:
+        where = f"jobs[{job.job_id}]"
+        ordered = sorted(attempts_by_job.get(job.job_id, ()), key=lambda a: a.number)
+        by_id = {a.attempt_id: a for a in ordered}
+        policy = job.recovery_policy
+        allowed_retries = (
+            0 if policy.max_infrastructure_retries is None else policy.max_infrastructure_retries
+        )
+        allowed_resumes = 0 if policy.max_resumes is None else policy.max_resumes
+        allowed_depth = 1 if policy.max_resume_depth is None else policy.max_resume_depth
+        if retries_used(ordered) > allowed_retries:
+            _issue(
+                issues,
+                "recovery.retry_budget",
+                where,
+                f"{retries_used(ordered)} budget-consuming retries exceed the limit {allowed_retries}",
+            )
+        if resumes_used(ordered) > allowed_resumes:
+            _issue(
+                issues,
+                "recovery.resume_budget",
+                where,
+                f"{resumes_used(ordered)} budget-consuming resumes exceed the limit {allowed_resumes}",
+            )
+
+        for attempt in ordered:
+            path = f"attempts[{attempt.attempt_id}]"
+            previous = (
+                None
+                if attempt.previous_attempt_id is None
+                else by_id.get(attempt.previous_attempt_id)
+            )
+            if attempt.origin in (AttemptOrigin.INFRASTRUCTURE_RETRY, AttemptOrigin.RESUME):
+                if previous is not None and previous.cause is AttemptEndCause.USER_STOP:
+                    _issue(
+                        issues,
+                        "recovery.after_user_stop",
+                        path,
+                        "a user stop is never followed by an automatic retry or resume",
+                    )
+                else:
+                    redispatch = (
+                        attempt.origin is AttemptOrigin.INFRASTRUCTURE_RETRY
+                        and previous is not None
+                        and never_started(previous)
+                    )
+                    if not redispatch and not policy.permits(attempt.origin):
+                        _issue(
+                            issues,
+                            "recovery.not_permitted_by_policy",
+                            path,
+                            f"the policy ({policy.source}) sets no limit for {attempt.origin}",
+                        )
+            if (
+                attempt.origin is AttemptOrigin.MANUAL_RESTART
+                and previous is not None
+                and previous.state
+                not in (AttemptState.FAILED, AttemptState.INTERRUPTED, AttemptState.CANCELED)
+            ):
+                _issue(
+                    issues,
+                    "recovery.manual_restart",
+                    path,
+                    f"a manual restart cannot follow an attempt that is {previous.state}",
+                )
+            if attempt.origin is AttemptOrigin.RESUME:
+                _check_resume(issues, path, job, attempt, ordered, versions, allowed_depth)
+
+
+def _check_resume(
+    issues: list[ValidationIssue],
+    path: str,
+    job: Job,
+    attempt: Attempt,
+    ordered: list[Attempt],
+    versions: Mapping[Any, AssetVersion],
+    allowed_depth: int,
+) -> None:
+    """A RESUME attempt reuses a stage artifact of the same job, pinned by hash, for the same task
+    fingerprint and stage, within the chain-depth limit."""
+    if resume_chain_depth(attempt, ordered) > allowed_depth:
+        _issue(issues, "recovery.resume_depth", path, f"resume chain longer than {allowed_depth}")
+    artifact_id = attempt.resume_artifact_version_id
+    earlier = {v for e in ordered if e.number < attempt.number for v in e.artifact_version_ids}
+    if artifact_id not in earlier:
+        _issue(
+            issues,
+            "recovery.resume_artifact",
+            path,
+            "the artifact is not listed by an earlier attempt of this job",
+        )
+    version = versions.get(artifact_id)
+    if version is None:
+        return
+    if version.state is not AssetState.AVAILABLE:
+        _issue(issues, "recovery.resume_artifact", path, f"the artifact is {version.state}")
+    if version.object_ref.sha256 != attempt.resume_artifact_sha256:
+        _issue(
+            issues, "recovery.resume_hash", path, "the artifact's bytes differ from the pinned hash"
+        )
+    provenance = version.provenance
+    task_fingerprint = job.task_fingerprint
+    if (
+        task_fingerprint is None
+        or not task_fingerprint.complete
+        or provenance.stage is None
+        or provenance.stage_key != stage_key(task_fingerprint, provenance.stage)
+    ):
+        _issue(
+            issues,
+            "recovery.resume_stage_key",
+            path,
+            "the artifact's stage key does not match this job's complete task fingerprint",
+        )
 
 
 # ---------------------------------------------------------------- production <-> workflow

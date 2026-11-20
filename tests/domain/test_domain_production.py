@@ -30,7 +30,7 @@ from studio.domain.production import (
     duration_ms_from_seconds,
     reserved_execution_only_keys,
 )
-from studio.domain.recovery import TakeOrigin
+from studio.domain.recovery import RecoveryPolicySnapshot, TakeOrigin
 from studio.domain.states import JobState, TakeState
 from studio.domain.validation import DomainSnapshot, validate_snapshot
 from studio.domain.vocab import Operation
@@ -489,6 +489,7 @@ def _job(**kw: Any) -> Job:
         "project_id": "proj_1",
         "task": TaskSpec(creative=creative()),
         "state": JobState.RUNNING,
+        "recovery_policy": RecoveryPolicySnapshot.no_automatic_recovery(),
         "identity_hash": IDENT,
         "task_fingerprint": TASKFP,
     }

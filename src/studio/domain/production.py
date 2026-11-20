@@ -133,8 +133,8 @@ class Rational:
             match = _RATIONAL_RE.fullmatch(value)
             if match is None:
                 fail("rational.format", path, f"{value!r} is not 'N' or 'N/D'")
-            den = match.group(2)
-            return cls(int(match.group(1)), 1 if den is None else int(den))
+            numerator, denominator = match.groups()
+            return cls(int(numerator), 1 if denominator is None else int(denominator))
         fail("rational.type", path, f"{type(value).__name__} is not a rate")
 
     def to_payload(self) -> dict[str, int]:

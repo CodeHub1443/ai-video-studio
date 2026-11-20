@@ -161,6 +161,8 @@ class Provenance:
     attempt_id: AttemptId | None = None
     identity_hash: Fingerprint | None = None  # the producing task's creative identity, if known
     task_fingerprint: Fingerprint | None = None  # the producing task's fingerprint, if known
+    stage: str | None = None  # an intermediate artifact: the stage that produced it
+    stage_key: Fingerprint | None = None  # stage_key(task_fingerprint, stage), for resume checks
     source_description: str | None = None  # required for IMPORTED: where the bytes came from
     original_name: str | None = None  # file name at the source, informational only
 
@@ -172,10 +174,15 @@ class Provenance:
         for name, kind in (
             ("identity_hash", FingerprintKind.CREATIVE_IDENTITY),
             ("task_fingerprint", FingerprintKind.TASK_FINGERPRINT),
+            ("stage_key", FingerprintKind.STAGE_KEY),
         ):
             value = getattr(self, name)
             if value is not None and (not isinstance(value, Fingerprint) or value.kind is not kind):
                 fail(f"provenance.{name}", f"provenance.{name}", f"expected a {kind} fingerprint")
+        if (self.stage is None) != (self.stage_key is None):
+            fail("provenance.stage", "provenance.stage", "stage and stage_key go together")
+        if self.stage is not None:
+            check_id(self.stage, "provenance.stage", ROLE_RE)
         if self.source_description is not None:
             check_text(self.source_description, "provenance.source_description")
         if self.original_name is not None:
@@ -206,6 +213,8 @@ class Provenance:
                     self.attempt_id,
                     self.identity_hash,
                     self.task_fingerprint,
+                    self.stage,
+                    self.stage_key,
                 )
             ):
                 fail(

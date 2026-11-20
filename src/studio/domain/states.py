@@ -233,7 +233,7 @@ JOB_TRANSITIONS = _table(
         JobState.WAITING_RESOURCES: (
             JobState.RUNNING,
             JobState.READY,
-            JobState.FAILED,  # permanently inadmissible
+            JobState.FAILED,  # permanently inadmissible; needs Job.failure (workflow.check_job_transition)
             JobState.CANCELED,
         ),
         JobState.RUNNING: (
