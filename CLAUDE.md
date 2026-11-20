@@ -43,7 +43,7 @@ If a brief conflicts with an accepted ADR or this file, stop and report; do not 
 - Approval gates never hold a GPU lease. Generated outputs never overwrite approved versions. Imported assets are first-class assets with provenance.
 - No paid or cloud inference APIs. No model or package downloads without explicit authorization.
 - Never print secrets or environment variable values; report names only.
-- Do not run Python in any form (imports, compileall, tools) unless the brief grants A3 and a project venv exists. Running Python writes __pycache__.
+- Do not run Python in any form (imports, compileall, tools) unless the brief grants A3, and then only with the shared dev environment and PYTHONDONTWRITEBYTECODE=1.
 
 ## Decision references
 - User decisions are cited as UD-n. ADR-0008 (D-n, P-n), ADR-0010 (P-n, U-n) and the older design items D6-D9 are separate series. Never mix them.
@@ -72,8 +72,13 @@ If a brief conflicts with an accepted ADR or this file, stop and report; do not 
 - Planned, not present yet: tests/, workflows/, and the packages core, persistence, engines, resources, scheduler, assets, qc, audio, post, review, plan, cli.
 
 ## Commands (only when the brief authorizes them)
-- No environment exists yet. The planned project venv is software\.venv: Python 3.12, torch-free, created only under A2.
-- Once it exists, A3 checks are: ruff check src tests (never --fix), pyright, and pytest (the default addopts exclude the gpu, comfyui and ltx markers).
+- Shared dev environment for every worktree: E:\AI_VIDEO_STUDIO\envs\studio-dev (Python 3.12, torch-free, the project is not installed). Exact versions: requirements/dev.lock.txt. Never install into it unless the brief grants A2.
+- Run from the repository or worktree root with PYTHONPATH=src and PYTHONDONTWRITEBYTECODE=1, using E:\AI_VIDEO_STUDIO\envs\studio-dev\Scripts\python.exe (PY):
+  - PY -m ruff check src tests --no-cache   (never --fix unless the brief says so)
+  - PY -m ruff format --check src tests --no-cache
+  - E:\AI_VIDEO_STUDIO\envs\studio-dev\Scripts\pyright.exe --pythonpath PY
+  - PY -m pytest -p no:cacheprovider   (default addopts exclude the gpu, comfyui and ltx markers)
+- Formatting is owned by ruff format; E501 is not linted.
 
 ## Stop conditions
 Stop and report the issue, evidence, impact, decision needed and safest next step when:

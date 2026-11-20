@@ -107,7 +107,11 @@ class Job:
             fail("job.retries", "job.max_infrastructure_retries", "must be an integer >= 0")
         if self.state in RESOLVED_REQUIRED_JOB_STATES:
             if not self.task.is_resolved:
-                fail("job.unresolved", "job.task", f"a {self.state} job needs a resolved task (seed persisted)")
+                fail(
+                    "job.unresolved",
+                    "job.task",
+                    f"a {self.state} job needs a resolved task (seed persisted)",
+                )
             if self.spec_hash is None:
                 fail("job.spec_hash", "job.spec_hash", f"a {self.state} job needs its spec_hash")
 
@@ -135,7 +139,11 @@ class Attempt:
             fail("attempt.number", "attempt.number", "must be an integer >= 1")
         check_optional_id(self.previous_attempt_id, "attempt.previous_attempt_id")
         check_optional_id(self.resume_artifact_version_id, "attempt.resume_artifact_version_id")
-        _set(self, "output_version_ids", check_unique_ids(self.output_version_ids, "attempt.output_version_ids"))
+        _set(
+            self,
+            "output_version_ids",
+            check_unique_ids(self.output_version_ids, "attempt.output_version_ids"),
+        )
         _check_aware(self.started_at, "attempt.started_at")
         _check_aware(self.finished_at, "attempt.finished_at")
         if self.started_at and self.finished_at and self.finished_at < self.started_at:
@@ -143,26 +151,61 @@ class Attempt:
 
         if self.origin is AttemptOrigin.INITIAL:
             if self.number != 1 or self.previous_attempt_id is not None:
-                fail("attempt.origin", "attempt.origin", "the initial attempt is number 1 with no predecessor")
+                fail(
+                    "attempt.origin",
+                    "attempt.origin",
+                    "the initial attempt is number 1 with no predecessor",
+                )
         else:
             if self.number < 2 or self.previous_attempt_id is None:
-                fail("attempt.origin", "attempt.origin", f"{self.origin} follows an earlier attempt")
+                fail(
+                    "attempt.origin", "attempt.origin", f"{self.origin} follows an earlier attempt"
+                )
             if self.previous_attempt_id == self.attempt_id:
-                fail("attempt.origin", "attempt.previous_attempt_id", "an attempt cannot follow itself")
+                fail(
+                    "attempt.origin",
+                    "attempt.previous_attempt_id",
+                    "an attempt cannot follow itself",
+                )
         if self.origin is AttemptOrigin.RESUME:
             if self.resume_artifact_version_id is None:
-                fail("attempt.resume", "attempt.resume_artifact_version_id", "resume needs the reused artifact")
+                fail(
+                    "attempt.resume",
+                    "attempt.resume_artifact_version_id",
+                    "resume needs the reused artifact",
+                )
         elif self.resume_artifact_version_id is not None:
-            fail("attempt.resume", "attempt.resume_artifact_version_id", "only a resume attempt reuses an artifact")
+            fail(
+                "attempt.resume",
+                "attempt.resume_artifact_version_id",
+                "only a resume attempt reuses an artifact",
+            )
 
         if self.state is AttemptState.FAILED and self.error_class is None:
-            fail("attempt.error_class", "attempt.error_class", "a failed attempt must be classified")
-        if self.error_class is not None and self.state not in (AttemptState.FAILED, AttemptState.INTERRUPTED):
-            fail("attempt.error_class", "attempt.error_class", "only failed/interrupted attempts carry one")
+            fail(
+                "attempt.error_class", "attempt.error_class", "a failed attempt must be classified"
+            )
+        if self.error_class is not None and self.state not in (
+            AttemptState.FAILED,
+            AttemptState.INTERRUPTED,
+        ):
+            fail(
+                "attempt.error_class",
+                "attempt.error_class",
+                "only failed/interrupted attempts carry one",
+            )
         if self.state is AttemptState.SUCCEEDED and not self.output_version_ids:
-            fail("attempt.outputs", "attempt.output_version_ids", "a succeeded attempt produced outputs")
+            fail(
+                "attempt.outputs",
+                "attempt.output_version_ids",
+                "a succeeded attempt produced outputs",
+            )
         if self.state is not AttemptState.SUCCEEDED and self.output_version_ids:
-            fail("attempt.outputs", "attempt.output_version_ids", "only a succeeded attempt has outputs")
+            fail(
+                "attempt.outputs",
+                "attempt.output_version_ids",
+                "only a succeeded attempt has outputs",
+            )
 
 
 # ---------------------------------------------------------------- approvals and gates
@@ -182,11 +225,15 @@ class ApprovalPurpose(StrEnum):
 
 class ApprovalAuthority(StrEnum):
     HUMAN = "human"
-    PRE_AUTHORIZED_POLICY = "pre_authorized_policy"  # which policies exist is undecided (ADR-0010 U-1)
+    PRE_AUTHORIZED_POLICY = (
+        "pre_authorized_policy"  # which policies exist is undecided (ADR-0010 U-1)
+    )
 
 
 _PURPOSE_SUBJECTS: dict[ApprovalPurpose, frozenset[ApprovalSubjectKind]] = {
-    ApprovalPurpose.CONTENT_REVIEW: frozenset({ApprovalSubjectKind.TAKE, ApprovalSubjectKind.ASSET_VERSION}),
+    ApprovalPurpose.CONTENT_REVIEW: frozenset(
+        {ApprovalSubjectKind.TAKE, ApprovalSubjectKind.ASSET_VERSION}
+    ),
     ApprovalPurpose.RESOURCE_ADAPTATION: frozenset({ApprovalSubjectKind.TAKE}),
     ApprovalPurpose.GATE_DECISION: frozenset({ApprovalSubjectKind.GATE}),
 }
@@ -211,7 +258,9 @@ class Approval:
     purpose: ApprovalPurpose
     state: ApprovalState = ApprovalState.PENDING
     authority: ApprovalAuthority = ApprovalAuthority.HUMAN
-    policy_ref: str | None = None  # names the pre-authorizing policy; the domain does not define policies
+    policy_ref: str | None = (
+        None  # names the pre-authorizing policy; the domain does not define policies
+    )
     decided_by: str | None = None
     decided_at: datetime | None = None
     comment: str = ""
@@ -220,7 +269,11 @@ class Approval:
     def __post_init__(self) -> None:
         check_id(self.approval_id, "approval.approval_id")
         if self.subject.kind not in _PURPOSE_SUBJECTS[self.purpose]:
-            fail("approval.subject", "approval.subject", f"{self.purpose} cannot apply to a {self.subject.kind}")
+            fail(
+                "approval.subject",
+                "approval.subject",
+                f"{self.purpose} cannot apply to a {self.subject.kind}",
+            )
         _check_aware(self.decided_at, "approval.decided_at")
         check_text(self.comment, "approval.comment", allow_empty=True)
         for name in ("policy_ref", "decided_by", "stale_reason"):
@@ -228,21 +281,33 @@ class Approval:
             if value is not None:
                 check_text(value, f"approval.{name}")
         if self.authority is ApprovalAuthority.PRE_AUTHORIZED_POLICY and self.policy_ref is None:
-            fail("approval.policy", "approval.policy_ref", "a pre-authorized decision must cite its policy")
+            fail(
+                "approval.policy",
+                "approval.policy_ref",
+                "a pre-authorized decision must cite its policy",
+            )
         if self.authority is ApprovalAuthority.HUMAN and self.policy_ref is not None:
             fail("approval.policy", "approval.policy_ref", "a human decision cites no policy")
         decided = self.state in (ApprovalState.APPROVED, ApprovalState.REJECTED)
-        if self.state is ApprovalState.PENDING and (self.decided_at is not None or self.decided_by is not None):
+        if self.state is ApprovalState.PENDING and (
+            self.decided_at is not None or self.decided_by is not None
+        ):
             fail("approval.pending", "approval", "a pending approval has no decision data")
         if decided:
             if self.decided_at is None:
                 fail("approval.decided_at", "approval.decided_at", "a decision needs a timestamp")
             if self.authority is ApprovalAuthority.HUMAN and self.decided_by is None:
-                fail("approval.decided_by", "approval.decided_by", "a human decision needs a decider")
+                fail(
+                    "approval.decided_by", "approval.decided_by", "a human decision needs a decider"
+                )
         if self.state is ApprovalState.STALE and self.stale_reason is None:
             fail("approval.stale", "approval.stale_reason", "a stale approval must say why")
         if self.state is not ApprovalState.STALE and self.stale_reason is not None:
-            fail("approval.stale", "approval.stale_reason", "only a stale approval has a stale_reason")
+            fail(
+                "approval.stale",
+                "approval.stale_reason",
+                "only a stale approval has a stale_reason",
+            )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -261,7 +326,11 @@ class Gate:
         check_text(self.title, "gate.title")
         check_optional_id(self.approval_id, "gate.approval_id")
         if self.state in (GateState.PASSED, GateState.REJECTED) and self.approval_id is None:
-            fail("gate.approval", "gate.approval_id", f"a {self.state} gate needs its decision record")
+            fail(
+                "gate.approval",
+                "gate.approval_id",
+                f"a {self.state} gate needs its decision record",
+            )
 
 
 # ---------------------------------------------------------------- DAG
@@ -305,7 +374,11 @@ class Dependency:
             if self.upstream.kind is not NodeKind.JOB or self.downstream.kind is not NodeKind.JOB:
                 fail("dependency.data_kind", "dependency", "data dependencies connect jobs to jobs")
             if self.output_role is None or self.input_role is None:
-                fail("dependency.roles", "dependency", "a data dependency names an output and an input role")
+                fail(
+                    "dependency.roles",
+                    "dependency",
+                    "a data dependency names an output and an input role",
+                )
             check_id(self.output_role, "dependency.output_role", ROLE_RE)
             check_id(self.input_role, "dependency.input_role", ROLE_RE)
         elif self.output_role is not None or self.input_role is not None:
@@ -335,15 +408,27 @@ class WorkflowGraph:
             label = f"{dep.upstream.key}->{dep.downstream.key}"
             for end in (dep.upstream, dep.downstream):
                 if end.key not in known:
-                    issues.append(ValidationIssue("dag.unknown_node", label, f"{end.key} is not a node"))
-            signature = (dep.upstream.key, dep.downstream.key, dep.kind.value, dep.output_role, dep.input_role)
+                    issues.append(
+                        ValidationIssue("dag.unknown_node", label, f"{end.key} is not a node")
+                    )
+            signature = (
+                dep.upstream.key,
+                dep.downstream.key,
+                dep.kind.value,
+                dep.output_role,
+                dep.input_role,
+            )
             if signature in seen:
-                issues.append(ValidationIssue("dag.duplicate_dependency", label, "duplicate dependency"))
+                issues.append(
+                    ValidationIssue("dag.duplicate_dependency", label, "duplicate dependency")
+                )
             seen.add(signature)
             edges.append((dep.upstream.key, dep.downstream.key))
         _, remaining = topological_order(known, edges)
         if remaining:
-            issues.append(ValidationIssue("dag.cycle", "graph", f"cycle among nodes: {', '.join(remaining)}"))
+            issues.append(
+                ValidationIssue("dag.cycle", "graph", f"cycle among nodes: {', '.join(remaining)}")
+            )
         return tuple(issues)
 
     def topological_order(self) -> tuple[NodeRef, ...]:
@@ -357,7 +442,15 @@ class WorkflowGraph:
         return tuple(by_key[k] for k in order)
 
     def upstream_of(self, node: NodeRef) -> tuple[NodeRef, ...]:
-        return tuple(sorted({d.upstream for d in self.dependencies if d.downstream == node}, key=lambda n: n.key))
+        return tuple(
+            sorted(
+                {d.upstream for d in self.dependencies if d.downstream == node}, key=lambda n: n.key
+            )
+        )
 
     def downstream_of(self, node: NodeRef) -> tuple[NodeRef, ...]:
-        return tuple(sorted({d.downstream for d in self.dependencies if d.upstream == node}, key=lambda n: n.key))
+        return tuple(
+            sorted(
+                {d.downstream for d in self.dependencies if d.upstream == node}, key=lambda n: n.key
+            )
+        )

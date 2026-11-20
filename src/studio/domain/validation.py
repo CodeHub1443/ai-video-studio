@@ -11,7 +11,7 @@ who may approve what) are intentionally absent; see ADR-0010 for the open items.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -33,14 +33,14 @@ from studio.domain.recovery import (
 )
 from studio.domain.states import (
     ACTIVE_JOB_STATE_FOR_ATTEMPT,
+    ATTEMPT_TRANSITIONS,
+    JOB_TRANSITIONS,
     ApprovalState,
     AttemptState,
     GateState,
     JobState,
     ShotState,
     TakeState,
-    ATTEMPT_TRANSITIONS,
-    JOB_TRANSITIONS,
 )
 from studio.domain.workflow import (
     Approval,
@@ -88,7 +88,9 @@ def _issue(issues: list[ValidationIssue], code: str, path: str, message: str) ->
 def _unique(issues: list[ValidationIssue], label: str, ids: Iterable[str]) -> None:
     for value, count in sorted(Counter(ids).items()):
         if count > 1:
-            _issue(issues, "ref.duplicate_id", f"{label}[{value}]", f"{count} {label} share this id")
+            _issue(
+                issues, "ref.duplicate_id", f"{label}[{value}]", f"{count} {label} share this id"
+            )
 
 
 def _contiguous(
@@ -97,7 +99,12 @@ def _contiguous(
     """Each group's numbers must be exactly 1..n (no duplicates, no gaps)."""
     for owner, numbers in sorted(groups.items()):
         if sorted(numbers) != list(range(1, len(numbers) + 1)):
-            _issue(issues, "ref.numbering", f"{label}[{owner}]", f"{what} must be unique and contiguous from 1")
+            _issue(
+                issues,
+                "ref.numbering",
+                f"{label}[{owner}]",
+                f"{what} must be unique and contiguous from 1",
+            )
 
 
 def validate_snapshot(snapshot: DomainSnapshot) -> tuple[ValidationIssue, ...]:
@@ -172,15 +179,35 @@ def _check_production(s: DomainSnapshot, issues: list[ValidationIssue]) -> None:
         if shot.selected_take_id is not None:
             selected = takes.get(shot.selected_take_id)
             if selected is None:
-                _issue(issues, "ref.missing", f"{where}.selected_take_id", f"unknown take {shot.selected_take_id}")
+                _issue(
+                    issues,
+                    "ref.missing",
+                    f"{where}.selected_take_id",
+                    f"unknown take {shot.selected_take_id}",
+                )
             elif selected.shot_id != shot.shot_id:
-                _issue(issues, "ref.mismatch", f"{where}.selected_take_id", "take belongs to another shot")
+                _issue(
+                    issues,
+                    "ref.mismatch",
+                    f"{where}.selected_take_id",
+                    "take belongs to another shot",
+                )
             elif selected.state not in (TakeState.PRODUCED, TakeState.APPROVED):
-                _issue(issues, "state.selected_take", f"{where}.selected_take_id", f"selected take is {selected.state}")
+                _issue(
+                    issues,
+                    "state.selected_take",
+                    f"{where}.selected_take_id",
+                    f"selected take is {selected.state}",
+                )
         if shot.state is ShotState.APPROVED:
             selected = takes.get(shot.selected_take_id) if shot.selected_take_id else None
             if selected is None or selected.state is not TakeState.APPROVED:
-                _issue(issues, "state.shot_approved", where, "an approved shot needs an approved selected take")
+                _issue(
+                    issues,
+                    "state.shot_approved",
+                    where,
+                    "an approved shot needs an approved selected take",
+                )
         if shot.state is ShotState.IN_REVIEW and not any(
             t.state in (TakeState.PRODUCED, TakeState.APPROVED) for t in shot_takes
         ):
@@ -188,7 +215,12 @@ def _check_production(s: DomainSnapshot, issues: list[ValidationIssue]) -> None:
         if shot.state is ShotState.GENERATING and not any(
             t.state in (TakeState.PLANNED, TakeState.GENERATING) for t in shot_takes
         ):
-            _issue(issues, "state.shot_generating", where, "generating without a planned or generating take")
+            _issue(
+                issues,
+                "state.shot_generating",
+                where,
+                "generating without a planned or generating take",
+            )
 
     for take in s.takes:
         where = f"takes[{take.take_id}]"
@@ -196,10 +228,18 @@ def _check_production(s: DomainSnapshot, issues: list[ValidationIssue]) -> None:
             _issue(issues, "ref.missing", f"{where}.shot_id", f"unknown shot {take.shot_id}")
         for version_id in take.output_version_ids:
             if version_id not in versions:
-                _issue(issues, "ref.missing", f"{where}.output_version_ids", f"unknown version {version_id}")
+                _issue(
+                    issues,
+                    "ref.missing",
+                    f"{where}.output_version_ids",
+                    f"unknown version {version_id}",
+                )
         if take.source_take_id is not None:
             _check_take_source(issues, where, take, takes)
-        if take.origin is TakeOrigin.RESOURCE_ADAPTATION and take.adaptation_approval_id is not None:
+        if (
+            take.origin is TakeOrigin.RESOURCE_ADAPTATION
+            and take.adaptation_approval_id is not None
+        ):
             approval = approvals.get(take.adaptation_approval_id)
             if approval is None:
                 _issue(issues, "ref.missing", f"{where}.adaptation_approval_id", "unknown approval")
@@ -208,39 +248,65 @@ def _check_production(s: DomainSnapshot, issues: list[ValidationIssue]) -> None:
                     approval.subject.kind is not ApprovalSubjectKind.TAKE
                     or approval.subject.subject_id != take.take_id
                 ):
-                    _issue(issues, "ref.mismatch", f"{where}.adaptation_approval_id", "approval is not for this adaptation")
-                if take.state not in (TakeState.PLANNED, TakeState.CANCELED) and approval.state is not ApprovalState.APPROVED:
-                    _issue(issues, "state.adaptation", where, "adapted take progressed without an approved adaptation")
+                    _issue(
+                        issues,
+                        "ref.mismatch",
+                        f"{where}.adaptation_approval_id",
+                        "approval is not for this adaptation",
+                    )
+                if (
+                    take.state not in (TakeState.PLANNED, TakeState.CANCELED)
+                    and approval.state is not ApprovalState.APPROVED
+                ):
+                    _issue(
+                        issues,
+                        "state.adaptation",
+                        where,
+                        "adapted take progressed without an approved adaptation",
+                    )
 
 
 def _check_take_source(
-    issues: list[ValidationIssue], where: str, take: Take, takes: dict[str, Take]
+    issues: list[ValidationIssue], where: str, take: Take, takes: Mapping[Any, Take]
 ) -> None:
     source = takes.get(take.source_take_id or "")
     if source is None:
-        _issue(issues, "ref.missing", f"{where}.source_take_id", f"unknown take {take.source_take_id}")
+        _issue(
+            issues, "ref.missing", f"{where}.source_take_id", f"unknown take {take.source_take_id}"
+        )
         return
     if source.shot_id != take.shot_id:
-        _issue(issues, "ref.mismatch", f"{where}.source_take_id", "source take belongs to another shot")
+        _issue(
+            issues, "ref.mismatch", f"{where}.source_take_id", "source take belongs to another shot"
+        )
     if take.origin is TakeOrigin.REPRODUCTION:
         if None not in (take.spec_hash, source.spec_hash) and take.spec_hash != source.spec_hash:
-            _issue(issues, "recovery.reproduction", where, "a reproduction keeps the source spec_hash")
+            _issue(
+                issues, "recovery.reproduction", where, "a reproduction keeps the source spec_hash"
+            )
         if None not in (take.seed, source.seed) and take.seed != source.seed:
             _issue(issues, "recovery.reproduction", where, "a reproduction keeps the source seed")
     elif take.origin is TakeOrigin.CREATIVE_REGENERATION:
         if None not in (take.spec_hash, source.spec_hash) and take.spec_hash == source.spec_hash:
-            _issue(issues, "recovery.regeneration", where, "a creative regeneration must differ in spec_hash")
+            _issue(
+                issues,
+                "recovery.regeneration",
+                where,
+                "a creative regeneration must differ in spec_hash",
+            )
     elif take.origin is TakeOrigin.RESOURCE_ADAPTATION:
         if None not in (take.seed, source.seed) and take.seed != source.seed:
-            _issue(issues, "recovery.adaptation", where, "a resource adaptation keeps the source seed")
+            _issue(
+                issues, "recovery.adaptation", where, "a resource adaptation keeps the source seed"
+            )
 
 
 def _check_asset_refs(
     issues: list[ValidationIssue],
     where: str,
     refs: Iterable[Any],
-    assets: dict[str, Asset],
-    versions: dict[str, AssetVersion],
+    assets: Mapping[Any, Asset],
+    versions: Mapping[Any, AssetVersion],
 ) -> None:
     for ref in refs:
         path = f"{where}.references[{ref.role}]"
@@ -255,7 +321,9 @@ def _check_asset_refs(
         if version.asset_id != ref.asset_id:
             _issue(issues, "ref.mismatch", path, "version belongs to another asset")
         if ref.sha256 is not None and ref.sha256 != version.object_ref.sha256:
-            _issue(issues, "ref.hash_mismatch", path, "content hash differs from the pinned version")
+            _issue(
+                issues, "ref.hash_mismatch", path, "content hash differs from the pinned version"
+            )
 
 
 # ---------------------------------------------------------------- assets
@@ -275,7 +343,12 @@ def _check_assets(s: DomainSnapshot, issues: list[ValidationIssue]) -> None:
         parents_of[edge.child_version_id] += 1
         for end, label in ((edge.parent_version_id, "parent"), (edge.child_version_id, "child")):
             if end not in versions:
-                _issue(issues, "ref.missing", f"lineage[{edge.parent_version_id}->{edge.child_version_id}]", f"unknown {label} version {end}")
+                _issue(
+                    issues,
+                    "ref.missing",
+                    f"lineage[{edge.parent_version_id}->{edge.child_version_id}]",
+                    f"unknown {label} version {end}",
+                )
     issues.extend(validate_lineage(s.lineage))
 
     for version in s.asset_versions:
@@ -284,21 +357,45 @@ def _check_assets(s: DomainSnapshot, issues: list[ValidationIssue]) -> None:
         if asset is None:
             _issue(issues, "ref.missing", f"{where}.asset_id", f"unknown asset {version.asset_id}")
         else:
-            for found in check_metadata_for(asset.media_type, version.metadata, f"{where}.metadata"):
+            for found in check_metadata_for(
+                asset.media_type, version.metadata, f"{where}.metadata"
+            ):
                 issues.append(found)
         prov = version.provenance
         if prov.job_id is not None and prov.job_id not in jobs:
-            _issue(issues, "ref.missing", f"{where}.provenance.job_id", f"unknown job {prov.job_id}")
+            _issue(
+                issues, "ref.missing", f"{where}.provenance.job_id", f"unknown job {prov.job_id}"
+            )
         if prov.attempt_id is not None:
             attempt = attempts.get(prov.attempt_id)
             if attempt is None:
-                _issue(issues, "ref.missing", f"{where}.provenance.attempt_id", f"unknown attempt {prov.attempt_id}")
+                _issue(
+                    issues,
+                    "ref.missing",
+                    f"{where}.provenance.attempt_id",
+                    f"unknown attempt {prov.attempt_id}",
+                )
             elif attempt.job_id != prov.job_id:
-                _issue(issues, "ref.mismatch", f"{where}.provenance.attempt_id", "attempt belongs to another job")
+                _issue(
+                    issues,
+                    "ref.mismatch",
+                    f"{where}.provenance.attempt_id",
+                    "attempt belongs to another job",
+                )
         if prov.origin is ProvenanceOrigin.DERIVED and parents_of[version.version_id] == 0:
-            _issue(issues, "lineage.derived_orphan", where, "a derived version needs at least one lineage parent")
+            _issue(
+                issues,
+                "lineage.derived_orphan",
+                where,
+                "a derived version needs at least one lineage parent",
+            )
         if prov.origin is ProvenanceOrigin.IMPORTED and parents_of[version.version_id] > 0:
-            _issue(issues, "lineage.imported_parent", where, "an imported version has no lineage parents")
+            _issue(
+                issues,
+                "lineage.imported_parent",
+                where,
+                "an imported version has no lineage parents",
+            )
 
 
 # ---------------------------------------------------------------- workflow
@@ -333,11 +430,23 @@ def _check_workflow(s: DomainSnapshot, issues: list[ValidationIssue]) -> None:
                     _issue(issues, "ref.seed_mismatch", where, "job and take disagree on seed")
         for ref in job.task.creative.references:
             if ref.version_id is not None and ref.version_id not in versions:
-                _issue(issues, "ref.missing", f"{where}.task.references[{ref.role}]", f"unknown version {ref.version_id}")
-        _check_job_attempts(issues, where, job, sorted(attempts_by_job.get(job.job_id, ()), key=lambda a: a.number))
+                _issue(
+                    issues,
+                    "ref.missing",
+                    f"{where}.task.references[{ref.role}]",
+                    f"unknown version {ref.version_id}",
+                )
+        _check_job_attempts(
+            issues, where, job, sorted(attempts_by_job.get(job.job_id, ()), key=lambda a: a.number)
+        )
     for take_id, owned in sorted(jobs_by_take.items()):
         if len(owned) > 1:
-            _issue(issues, "ref.take_jobs", f"takes[{take_id}]", "a take is executed by at most one job")
+            _issue(
+                issues,
+                "ref.take_jobs",
+                f"takes[{take_id}]",
+                "a take is executed by at most one job",
+            )
 
     for attempt in s.attempts:
         where = f"attempts[{attempt.attempt_id}]"
@@ -345,18 +454,33 @@ def _check_workflow(s: DomainSnapshot, issues: list[ValidationIssue]) -> None:
             _issue(issues, "ref.missing", f"{where}.job_id", f"unknown job {attempt.job_id}")
         for version_id in attempt.output_version_ids:
             if version_id not in versions:
-                _issue(issues, "ref.missing", f"{where}.output_version_ids", f"unknown version {version_id}")
-        if attempt.resume_artifact_version_id is not None and attempt.resume_artifact_version_id not in versions:
+                _issue(
+                    issues,
+                    "ref.missing",
+                    f"{where}.output_version_ids",
+                    f"unknown version {version_id}",
+                )
+        if (
+            attempt.resume_artifact_version_id is not None
+            and attempt.resume_artifact_version_id not in versions
+        ):
             _issue(issues, "ref.missing", f"{where}.resume_artifact_version_id", "unknown version")
         if attempt.previous_attempt_id is not None:
             previous = attempts.get(attempt.previous_attempt_id)
             if previous is None:
                 _issue(issues, "ref.missing", f"{where}.previous_attempt_id", "unknown attempt")
             elif previous.job_id != attempt.job_id or previous.number != attempt.number - 1:
-                _issue(issues, "ref.mismatch", f"{where}.previous_attempt_id", "must be number n-1 of the same job")
+                _issue(
+                    issues,
+                    "ref.mismatch",
+                    f"{where}.previous_attempt_id",
+                    "must be number n-1 of the same job",
+                )
             else:
                 kind = ATTEMPT_ORIGIN_KIND[attempt.origin]
-                if kind is not None and not is_recovery_permitted(previous.state, previous.error_class, kind):
+                if kind is not None and not is_recovery_permitted(
+                    previous.state, previous.error_class, kind
+                ):
                     _issue(
                         issues, "recovery.not_permitted", where,
                         f"{attempt.origin} cannot follow an attempt that is {previous.state}"
@@ -376,13 +500,34 @@ def _check_workflow(s: DomainSnapshot, issues: list[ValidationIssue]) -> None:
             continue
         approval = approvals.get(gate.approval_id)
         if approval is None:
-            _issue(issues, "ref.missing", f"{where}.approval_id", f"unknown approval {gate.approval_id}")
+            _issue(
+                issues,
+                "ref.missing",
+                f"{where}.approval_id",
+                f"unknown approval {gate.approval_id}",
+            )
             continue
-        if approval.purpose is not ApprovalPurpose.GATE_DECISION or approval.subject.subject_id != gate.gate_id:
-            _issue(issues, "ref.mismatch", f"{where}.approval_id", "approval is not this gate's decision")
-        expected = {GateState.PASSED: ApprovalState.APPROVED, GateState.REJECTED: ApprovalState.REJECTED}.get(gate.state)
+        if (
+            approval.purpose is not ApprovalPurpose.GATE_DECISION
+            or approval.subject.subject_id != gate.gate_id
+        ):
+            _issue(
+                issues,
+                "ref.mismatch",
+                f"{where}.approval_id",
+                "approval is not this gate's decision",
+            )
+        expected = {
+            GateState.PASSED: ApprovalState.APPROVED,
+            GateState.REJECTED: ApprovalState.REJECTED,
+        }.get(gate.state)
         if expected is not None and approval.state is not expected:
-            _issue(issues, "state.gate", where, f"{gate.state} gate needs an {expected} decision, found {approval.state}")
+            _issue(
+                issues,
+                "state.gate",
+                where,
+                f"{gate.state} gate needs an {expected} decision, found {approval.state}",
+            )
 
     for approval in s.approvals:
         where = f"approvals[{approval.approval_id}]"
@@ -393,7 +538,12 @@ def _check_workflow(s: DomainSnapshot, issues: list[ValidationIssue]) -> None:
             ApprovalSubjectKind.GATE: lambda i: i in gates,
         }
         if not exists[subject.kind](subject.subject_id):
-            _issue(issues, "ref.missing", f"{where}.subject", f"unknown {subject.kind} {subject.subject_id}")
+            _issue(
+                issues,
+                "ref.missing",
+                f"{where}.subject",
+                f"unknown {subject.kind} {subject.subject_id}",
+            )
 
 
 def _check_job_attempts(
@@ -404,8 +554,16 @@ def _check_job_attempts(
         _issue(issues, "state.attempts", where, "more than one non-terminal attempt")
     if live and ordered[-1] is not live[0]:
         _issue(issues, "state.attempts", where, "a non-terminal attempt must be the latest one")
-    if sum(1 for a in ordered if a.origin is not AttemptOrigin.INITIAL) > job.max_infrastructure_retries:
-        _issue(issues, "recovery.budget", where, f"more than {job.max_infrastructure_retries} retry/resume attempts")
+    if (
+        sum(1 for a in ordered if a.origin is not AttemptOrigin.INITIAL)
+        > job.max_infrastructure_retries
+    ):
+        _issue(
+            issues,
+            "recovery.budget",
+            where,
+            f"more than {job.max_infrastructure_retries} retry/resume attempts",
+        )
     last = ordered[-1] if ordered else None
 
     if job.state in (JobState.QUEUED, JobState.BLOCKED) and ordered:
@@ -415,15 +573,32 @@ def _check_job_attempts(
     if last is not None:
         for attempt_state, job_state in ACTIVE_JOB_STATE_FOR_ATTEMPT.items():
             if last.state is attempt_state and job.state is not job_state:
-                _issue(issues, "state.job_attempts", where, f"latest attempt is {attempt_state} but job is {job.state}")
+                _issue(
+                    issues,
+                    "state.job_attempts",
+                    where,
+                    f"latest attempt is {attempt_state} but job is {job.state}",
+                )
             if job.state is job_state and last.state is not attempt_state:
-                _issue(issues, "state.job_attempts", where, f"job is {job.state} but latest attempt is {last.state}")
-    if job.state is JobState.SUCCEEDED and (last is None or last.state is not AttemptState.SUCCEEDED):
+                _issue(
+                    issues,
+                    "state.job_attempts",
+                    where,
+                    f"job is {job.state} but latest attempt is {last.state}",
+                )
+    if job.state is JobState.SUCCEEDED and (
+        last is None or last.state is not AttemptState.SUCCEEDED
+    ):
         _issue(issues, "state.job_attempts", where, "a succeeded job ends with a succeeded attempt")
     if job.state is JobState.RETRY_PENDING and (
         last is None or last.state not in (AttemptState.FAILED, AttemptState.INTERRUPTED)
     ):
-        _issue(issues, "state.job_attempts", where, "retry pending needs a failed or interrupted latest attempt")
+        _issue(
+            issues,
+            "state.job_attempts",
+            where,
+            "retry pending needs a failed or interrupted latest attempt",
+        )
     if job.state in (JobState.RUNNING, JobState.INGESTING) and last is None:
         _issue(issues, "state.job_attempts", where, f"a {job.state} job needs an attempt")
 
@@ -438,17 +613,24 @@ def _check_cross(s: DomainSnapshot, issues: list[ValidationIssue]) -> None:
         attempts_by_job[attempt.job_id].append(attempt)
     approvals_for_take: dict[str, list[Approval]] = defaultdict(list)
     for approval in s.approvals:
-        if approval.subject.kind is ApprovalSubjectKind.TAKE and approval.purpose is ApprovalPurpose.CONTENT_REVIEW:
+        if (
+            approval.subject.kind is ApprovalSubjectKind.TAKE
+            and approval.purpose is ApprovalPurpose.CONTENT_REVIEW
+        ):
             approvals_for_take[approval.subject.subject_id].append(approval)
 
     for take in s.takes:
         where = f"takes[{take.take_id}]"
         job = jobs_by_take.get(take.take_id)
-        if take.state is TakeState.GENERATING and (job is None or JOB_TRANSITIONS.is_terminal(job.state)):
+        if take.state is TakeState.GENERATING and (
+            job is None or JOB_TRANSITIONS.is_terminal(job.state)
+        ):
             _issue(issues, "state.take_job", where, "a generating take needs a non-terminal job")
         if take.state in (TakeState.PRODUCED, TakeState.APPROVED):
             if job is None or job.state is not JobState.SUCCEEDED:
-                _issue(issues, "state.take_job", where, f"a {take.state} take needs a succeeded job")
+                _issue(
+                    issues, "state.take_job", where, f"a {take.state} take needs a succeeded job"
+                )
             else:
                 produced = {
                     v
@@ -458,8 +640,18 @@ def _check_cross(s: DomainSnapshot, issues: list[ValidationIssue]) -> None:
                 }
                 extra = set(take.output_version_ids) - produced
                 if extra:
-                    _issue(issues, "state.take_outputs", where, f"outputs not produced by its job: {sorted(extra)}")
+                    _issue(
+                        issues,
+                        "state.take_outputs",
+                        where,
+                        f"outputs not produced by its job: {sorted(extra)}",
+                    )
         if take.state is TakeState.APPROVED and not any(
             a.state is ApprovalState.APPROVED for a in approvals_for_take.get(take.take_id, ())
         ):
-            _issue(issues, "state.take_approval", where, "an approved take needs an approved content review")
+            _issue(
+                issues,
+                "state.take_approval",
+                where,
+                "an approved take needs an approved content review",
+            )

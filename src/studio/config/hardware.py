@@ -37,42 +37,44 @@ class AdmissionThresholds(_Strict):
     (the corrected rule is docs/architecture.md section 4.1). None of these is measured."""
 
     # S1 stability window and margin: admit iff S1.free_min >= need + new_context_term + vram_margin
-    vram_margin_gb: float = Field(0.3, ge=0)
-    vram_jitter_mb: int = Field(128, ge=0)
-    window_samples: int = Field(5, ge=2)
-    window_interval_s: float = Field(1.0, gt=0)
+    vram_margin_gb: float = Field(default=0.3, ge=0)
+    vram_jitter_mb: int = Field(default=128, ge=0)
+    window_samples: int = Field(default=5, ge=2)
+    window_interval_s: float = Field(default=1.0, gt=0)
     # S3: calibration constant used only for new_context_term of a process about to start
-    default_cuda_context_mb: int = Field(400, ge=0)
+    default_cuda_context_mb: int = Field(default=400, ge=0)
     # S2: ComfyUI has yielded when torch_vram_total <= this
-    comfy_reserved_max_mb: int = Field(256, ge=0)
+    comfy_reserved_max_mb: int = Field(default=256, ge=0)
     # S4
-    ram_reserve_gb: float = Field(4.0, ge=0)
-    commit_reserve_gb: float = Field(2.0, ge=0)
+    ram_reserve_gb: float = Field(default=4.0, ge=0)
+    commit_reserve_gb: float = Field(default=2.0, ge=0)
     # timing
-    release_timeout_s: float = Field(90.0, gt=0)
-    released_validity_s: float = Field(10.0, gt=0)
-    queue_poll_interval_s: float = Field(1.0, gt=0)
+    release_timeout_s: float = Field(default=90.0, gt=0)
+    released_validity_s: float = Field(default=10.0, gt=0)
+    queue_poll_interval_s: float = Field(default=1.0, gt=0)
     # return conditions
-    return_vram_tolerance_mb: int = Field(128, ge=0)
-    return_vram_deadline_s: float = Field(30.0, gt=0)
-    return_ram_deadline_s: float = Field(60.0, gt=0)
+    return_vram_tolerance_mb: int = Field(default=128, ge=0)
+    return_vram_deadline_s: float = Field(default=30.0, gt=0)
+    return_ram_deadline_s: float = Field(default=60.0, gt=0)
     # S5 advisory
-    util_baseline_margin_pct: float = Field(30.0, ge=0)
+    util_baseline_margin_pct: float = Field(default=30.0, ge=0)
 
 
 class HardwareProfile(_Strict):
     schema_version: SchemaVersion = SCHEMA_VERSION
     name: str
     description: str = ""
-    gpu_vram_total_gb: float = Field(gt=0, description="nominal device VRAM; NVML is authoritative later")
+    gpu_vram_total_gb: float = Field(
+        gt=0, description="nominal device VRAM; NVML is authoritative later"
+    )
     # Unknown (None) until stated by the owner or measured; never guessed. Used only for static
     # registry-to-hardware compatibility checks.
-    system_ram_gb: float | None = Field(None, gt=0)
-    commit_limit_gb: float | None = Field(None, gt=0)
-    gpu_slots: int = Field(1, ge=1)
+    system_ram_gb: float | None = Field(default=None, gt=0)
+    commit_limit_gb: float | None = Field(default=None, gt=0)
+    gpu_slots: int = Field(default=1, ge=1)
     allow_media_during_inference: bool = False
     provisional: bool = True  # True until M3.2 calibration has been authorized and recorded
-    calibration_ref: str | None = Field(None, min_length=1)
+    calibration_ref: str | None = Field(default=None, min_length=1)
     thresholds: AdmissionThresholds = Field(default_factory=AdmissionThresholds)
 
     @model_validator(mode="after")
@@ -81,9 +83,13 @@ class HardwareProfile(_Strict):
         if self.thresholds.vram_margin_gb >= self.gpu_vram_total_gb:
             raise ValueError("vram_margin_gb must be smaller than gpu_vram_total_gb")
         if not self.provisional and self.calibration_ref is None:
-            raise ValueError("provisional=false requires calibration_ref (the recorded calibration run)")
+            raise ValueError(
+                "provisional=false requires calibration_ref (the recorded calibration run)"
+            )
         if self.provisional and self.calibration_ref is not None:
-            raise ValueError("calibration_ref is set but provisional is still true; they must agree")
+            raise ValueError(
+                "calibration_ref is set but provisional is still true; they must agree"
+            )
         return self
 
 

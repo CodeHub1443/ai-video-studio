@@ -87,14 +87,18 @@ class CreativeSpec:
     """What the output should be. Engine-neutral. Result-affecting parameters only."""
 
     operation: Operation
-    binding_id: str | None = None  # requested capability; None = to be chosen when the task is resolved
+    binding_id: str | None = (
+        None  # requested capability; None = to be chosen when the task is resolved
+    )
     prompt: str | None = None
     negative_prompt: str | None = None
     width: int | None = None
     height: int | None = None
     fps: float | None = None
     duration_s: float | None = None
-    seed: int | None = None  # None until resolved; a resolved task always has one (architecture section 5)
+    seed: int | None = (
+        None  # None until resolved; a resolved task always has one (architecture section 5)
+    )
     references: tuple[AssetRef, ...] = ()
     parameters: ParamMap = field(default_factory=dict)
 
@@ -142,7 +146,9 @@ class CreativeSpec:
         (e.g. for plan diffs) and tags itself so the two forms can never collide.
         """
         if resolved and not self.is_resolved:
-            raise UnresolvedSpecError("creative spec needs binding_id, seed and content-pinned references")
+            raise UnresolvedSpecError(
+                "creative spec needs binding_id, seed and content-pinned references"
+            )
         return {
             "kind": "creative_spec",
             "canonical_version": CANONICAL_VERSION,
@@ -197,14 +203,26 @@ def check_parameter_partition(
     creative_keys = set(creative.parameters)
     execution_keys = set(execution.parameters)
     for key in sorted(creative_keys & execution_keys):
-        issues.append(ValidationIssue("params.both_sides", f"{path}.{key}", "key is both creative and execution"))
+        issues.append(
+            ValidationIssue(
+                "params.both_sides", f"{path}.{key}", "key is both creative and execution"
+            )
+        )
     for key in sorted(creative_keys & declared):
         issues.append(
-            ValidationIssue("params.execution_only_in_creative", f"{path}.creative.{key}", "declared execution-only by the binding")
+            ValidationIssue(
+                "params.execution_only_in_creative",
+                f"{path}.creative.{key}",
+                "declared execution-only by the binding",
+            )
         )
     for key in sorted(execution_keys - declared):
         issues.append(
-            ValidationIssue("params.undeclared_execution", f"{path}.execution.{key}", "not declared execution-only by the binding")
+            ValidationIssue(
+                "params.undeclared_execution",
+                f"{path}.execution.{key}",
+                "not declared execution-only by the binding",
+            )
         )
     return tuple(issues)
 
@@ -297,10 +315,16 @@ class Take:
         if self.spec_hash is not None:
             check_sha256(self.spec_hash, "take.spec_hash")
         if self.seed is not None and (
-            isinstance(self.seed, bool) or not isinstance(self.seed, int) or not 0 <= self.seed <= SEED_MAX
+            isinstance(self.seed, bool)
+            or not isinstance(self.seed, int)
+            or not 0 <= self.seed <= SEED_MAX
         ):
             fail("spec.seed", "take.seed", "seed must be an integer in 0 .. 2**64-1")
-        _set(self, "output_version_ids", check_unique_ids(self.output_version_ids, "take.output_version_ids"))
+        _set(
+            self,
+            "output_version_ids",
+            check_unique_ids(self.output_version_ids, "take.output_version_ids"),
+        )
         check_optional_id(self.adaptation_approval_id, "take.adaptation_approval_id")
 
         if self.origin is TakeOrigin.INITIAL:
@@ -313,15 +337,26 @@ class Take:
                 fail("take.source", "take.source_take_id", "a take cannot be its own source")
         if self.origin is TakeOrigin.RESOURCE_ADAPTATION:
             if not self.reason.strip():
-                fail("take.reason", "take.reason", "resource adaptation must state what was adapted and why")
-            if self.state not in (TakeState.PLANNED, TakeState.CANCELED) and self.adaptation_approval_id is None:
+                fail(
+                    "take.reason",
+                    "take.reason",
+                    "resource adaptation must state what was adapted and why",
+                )
+            if (
+                self.state not in (TakeState.PLANNED, TakeState.CANCELED)
+                and self.adaptation_approval_id is None
+            ):
                 fail(
                     "take.adaptation_unapproved",
                     "take.adaptation_approval_id",
                     "an adapted take may not progress past 'planned' without an approval reference",
                 )
         elif self.adaptation_approval_id is not None:
-            fail("take.adaptation_approval", "take.adaptation_approval_id", "only adapted takes carry one")
+            fail(
+                "take.adaptation_approval",
+                "take.adaptation_approval_id",
+                "only adapted takes carry one",
+            )
 
         if self.state in _NO_OUTPUT_STATES and self.output_version_ids:
             fail("take.outputs", "take.output_version_ids", f"a {self.state} take has no outputs")

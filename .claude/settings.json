@@ -44,7 +44,6 @@
       "Bash(wget:*)",
       "Bash(ffmpeg:*)",
       "Bash(nvidia-smi:*)",
-      "Bash(git -C *)",
       "Bash(git config *)"
     ],
     "deny": [
@@ -75,7 +74,9 @@
       "Bash(git checkout -- *)",
       "Bash(git checkout * -- *)",
       "Bash(git branch * -D *)",
-      "Bash(git rebase *)"
+      "Bash(git rebase *)",
+      "Bash(git -C *)",
+      "Bash(git rebase)"
     ]
   }
 }

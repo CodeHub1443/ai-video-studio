@@ -65,8 +65,12 @@ class ErrorClass(StrEnum):
     Proposed vocabulary (ADR-0010 P-4): the architecture names ``error_class`` but not its members.
     """
 
-    INFRASTRUCTURE = "infrastructure"  # engine/process/network flake, transient; same inputs may succeed
-    RESOURCE = "resource"  # not enough VRAM/RAM/commit/time; the same task will not fit as configured
+    INFRASTRUCTURE = (
+        "infrastructure"  # engine/process/network flake, transient; same inputs may succeed
+    )
+    RESOURCE = (
+        "resource"  # not enough VRAM/RAM/commit/time; the same task will not fit as configured
+    )
     INVALID_SPEC = "invalid_spec"  # the task is wrong or unsupported by the binding
     INTEGRITY = "integrity"  # ingest verification failed (hash, probe, size)
     UNKNOWN = "unknown"  # cannot be classified; never retried automatically
@@ -94,25 +98,60 @@ class RecoveryRule:
 RECOVERY_RULES: Mapping[RecoveryKind, RecoveryRule] = MappingProxyType(
     {
         RecoveryKind.INFRASTRUCTURE_RETRY: RecoveryRule(
-            RecoveryKind.INFRASTRUCTURE_RETRY, True, False, False,
-            SpecRelation.SAME, SpecRelation.SAME, False, True, True,
+            RecoveryKind.INFRASTRUCTURE_RETRY,
+            True,
+            False,
+            False,
+            SpecRelation.SAME,
+            SpecRelation.SAME,
+            False,
+            True,
+            True,
         ),
         # Counted against the budget conservatively; whether resume has its own budget is open (U-3).
         RecoveryKind.RESUME: RecoveryRule(
-            RecoveryKind.RESUME, True, False, False,
-            SpecRelation.SAME, SpecRelation.SAME, False, True, True,
+            RecoveryKind.RESUME,
+            True,
+            False,
+            False,
+            SpecRelation.SAME,
+            SpecRelation.SAME,
+            False,
+            True,
+            True,
         ),
         RecoveryKind.RESOURCE_ADAPTATION: RecoveryRule(
-            RecoveryKind.RESOURCE_ADAPTATION, True, True, True,
-            SpecRelation.EITHER, SpecRelation.SAME, True, True, False,
+            RecoveryKind.RESOURCE_ADAPTATION,
+            True,
+            True,
+            True,
+            SpecRelation.EITHER,
+            SpecRelation.SAME,
+            True,
+            True,
+            False,
         ),
         RecoveryKind.CREATIVE_REGENERATION: RecoveryRule(
-            RecoveryKind.CREATIVE_REGENERATION, True, True, True,
-            SpecRelation.DIFFERENT, SpecRelation.EITHER, False, False, False,
+            RecoveryKind.CREATIVE_REGENERATION,
+            True,
+            True,
+            True,
+            SpecRelation.DIFFERENT,
+            SpecRelation.EITHER,
+            False,
+            False,
+            False,
         ),
         RecoveryKind.REPRODUCTION: RecoveryRule(
-            RecoveryKind.REPRODUCTION, True, True, True,
-            SpecRelation.SAME, SpecRelation.SAME, False, False, False,
+            RecoveryKind.REPRODUCTION,
+            True,
+            True,
+            True,
+            SpecRelation.SAME,
+            SpecRelation.SAME,
+            False,
+            False,
+            False,
         ),
     }
 )

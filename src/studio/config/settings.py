@@ -268,7 +268,9 @@ class PathsConfig(_Section):
             problems.append(f"ltx_python must point to python.exe: {self.ltx_python}")
         for name, p in owned.items():
             if overlaps(self.ltx_python, p):
-                problems.append(f"ltx_python must not be inside studio root {name}: {self.ltx_python}")
+                problems.append(
+                    f"ltx_python must not be inside studio root {name}: {self.ltx_python}"
+                )
         if problems:
             raise ValueError("; ".join(problems))
         return self
@@ -279,10 +281,10 @@ class ComfyUIConfig(_Section):
     The output namespace is pinned (``studio.config.namespaces``), not configured here."""
 
     host: str = "127.0.0.1"
-    port: int = Field(DEFAULT_COMFYUI_PORT, ge=1, le=65535)
+    port: int = Field(default=DEFAULT_COMFYUI_PORT, ge=1, le=65535)
     allow_remote: bool = False
-    client_id_prefix: str = Field("studio", pattern=r"^[a-z0-9_-]+$")
-    request_timeout_s: float = Field(30.0, gt=0)
+    client_id_prefix: str = Field(default="studio", pattern=r"^[a-z0-9_-]+$")
+    request_timeout_s: float = Field(default=30.0, gt=0)
 
     @model_validator(mode="after")
     def _loopback_only(self) -> Self:
@@ -331,7 +333,9 @@ class _OverlayToml(TomlConfigSettingsSource):
     def __call__(self) -> dict[str, Any]:
         data = super().__call__()
         if "env" in data:
-            raise ValueError("'env' cannot be set in a TOML file; use STUDIO_ENV or the env= argument")
+            raise ValueError(
+                "'env' cannot be set in a TOML file; use STUDIO_ENV or the env= argument"
+            )
         return data
 
 
@@ -407,13 +411,17 @@ class StudioSettings(BaseSettings):
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         # Same resolution as the ``env`` field: an ``env=`` kwarg selects the overlay too.
-        env_name = resolve_environment(_init_kwargs(init_settings)).value  # validated file-name part
+        env_name = resolve_environment(
+            _init_kwargs(init_settings)
+        ).value  # validated file-name part
         try:
             cfg: Path | None = config_dir()
         except ConfigDirNotFound:
             cfg = None  # installed package without STUDIO_CONFIG_DIR: built-in defaults only
         files = [] if cfg is None else [cfg / "studio.toml", cfg / f"studio.{env_name}.toml"]
-        toml = _OverlayToml(settings_cls, toml_file=files)  # later file wins; missing files are skipped
+        toml = _OverlayToml(
+            settings_cls, toml_file=files
+        )  # later file wins; missing files are skipped
         return (init_settings, env_settings, toml)
 
     @model_validator(mode="after")
@@ -459,7 +467,9 @@ def _test_isolation_problems(s: StudioSettings) -> list[str]:
         return ["test_sandbox_root is required (explicit allowlisted sandbox for all test paths)"]
     problems: list[str] = []
     if len(PureWindowsPath(str(sandbox)).parts) < 3:
-        problems.append(f"test_sandbox_root must be at least two levels below the drive root: {sandbox}")
+        problems.append(
+            f"test_sandbox_root must be at least two levels below the drive root: {sandbox}"
+        )
     protected = {
         "real workspace": DEFAULT_WORKSPACE_ROOT,
         "protected LTX repository": DEFAULT_LTX_REPO,

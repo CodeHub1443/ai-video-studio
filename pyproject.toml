@@ -54,6 +54,8 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC"]
+# line length is owned by ruff format (B-06)
+ignore = ["E501"]
 
 [tool.pyright]
 pythonVersion = "3.12"

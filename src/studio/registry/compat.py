@@ -31,14 +31,18 @@ class BindingVerdict:
     binding_id: str
     profile_name: str
     admissible: bool
-    required_vram_gb: float | None  # new_context_term and margin included; None when not applicable/unknown
+    required_vram_gb: (
+        float | None
+    )  # new_context_term and margin included; None when not applicable/unknown
     codes: tuple[str, ...]  # every blocking reason
 
 
 def admission_profile(settings: StudioSettings) -> HardwareProfile:
     """The one profile used for admission: the one ``settings.hardware_profile`` names. Read-only."""
     profile = load_hardware_profile(settings.config_dir, settings.hardware_profile)
-    if profile.name != settings.hardware_profile:  # load_hardware_profile already checks; keep explicit
+    if (
+        profile.name != settings.hardware_profile
+    ):  # load_hardware_profile already checks; keep explicit
         raise ValueError("hardware profile does not match the selected profile name")
     return profile
 
@@ -57,8 +61,10 @@ def _evaluate(
         blocking.append("vram_unknown")
     else:
         resident = engine_kind is EngineKind.SERVICE
-        context_gb = 0.0 if (resident or r.estimate_includes_context is True) else (
-            t.default_cuda_context_mb / 1024
+        context_gb = (
+            0.0
+            if (resident or r.estimate_includes_context is True)
+            else (t.default_cuda_context_mb / 1024)
         )
         required = r.vram_gb.value + context_gb + t.vram_margin_gb
         if required > profile.gpu_vram_total_gb:
@@ -101,7 +107,9 @@ def is_admissible(registry: Registry, binding_id: str, settings: StudioSettings)
     return _evaluate(binding, engine.kind if engine else None, admission_profile(settings))
 
 
-def check_hardware_compatibility(registry: Registry, settings: StudioSettings) -> list[RegistryIssue]:
+def check_hardware_compatibility(
+    registry: Registry, settings: StudioSettings
+) -> list[RegistryIssue]:
     """One issue per blocking reason of every non-admissible binding, plus a warning while the profile's
     thresholds are provisional. All blocking reasons are ``error``: nothing unknown is let through."""
     profile = admission_profile(settings)
