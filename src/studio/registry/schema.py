@@ -198,7 +198,7 @@ class Quantity(_Strict):
     """One resource number with explicit provenance. ``value`` is ``None`` when nobody knows it.
 
     Unknown is a first-class state: it is never defaulted to a number, and for GPU memory it is never
-    treated as admissible (``studio.registry.compat``).
+    treated as statically compatible (``studio.registry.compat``).
     """
 
     value: float | None = Field(default=None, ge=0)

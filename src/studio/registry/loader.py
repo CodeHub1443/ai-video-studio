@@ -348,7 +348,7 @@ def validate_registry(reg: Registry) -> list[RegistryIssue]:
                 warn(
                     f"{label}_unknown",
                     b.id,
-                    f"{label} requirement is unknown; the binding is NOT admissible until it is measured",
+                    f"{label} requirement is unknown; the binding is NOT statically compatible until it is measured",
                 )
         roles = [s.role for s in b.inputs]
         if len(roles) != len(set(roles)):
