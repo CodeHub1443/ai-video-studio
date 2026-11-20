@@ -10,10 +10,13 @@ from studio.registry.loader import (
     Registry,
     RegistryError,
     RegistryIssue,
+    ResolvedRecovery,
     load_registry,
     validate_registry,
 )
 from studio.registry.schema import (
+    EXECUTION_ONLY_CREATIVE_ALLOWLIST,
+    RESERVED_CREATIVE_FIELDS,
     BindingSpec,
     EngineKind,
     EngineSpec,
@@ -22,10 +25,13 @@ from studio.registry.schema import (
     ModelSpec,
     Operation,
     Quantity,
+    RecoveryPolicy,
     ResourceProfile,
 )
 
 __all__ = [
+    "EXECUTION_ONLY_CREATIVE_ALLOWLIST",
+    "RESERVED_CREATIVE_FIELDS",
     "BindingSpec",
     "BindingVerdict",
     "EngineKind",
@@ -35,9 +41,11 @@ __all__ = [
     "ModelSpec",
     "Operation",
     "Quantity",
+    "RecoveryPolicy",
     "Registry",
     "RegistryError",
     "RegistryIssue",
+    "ResolvedRecovery",
     "ResourceProfile",
     "admission_profile",
     "check_hardware_compatibility",

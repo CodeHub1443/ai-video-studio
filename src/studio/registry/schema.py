@@ -11,7 +11,7 @@ all the way down.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Final, Literal
 
 from pydantic import (
     BaseModel,
@@ -23,6 +23,10 @@ from pydantic import (
 )
 
 from studio.config.paths import PathValidationError, validate_relative_posix
+
+# Operation, MediaType and CommercialUse are defined ONCE, in studio.domain.vocab (ADR-0010 P-6). The
+# registry imports them (it may import the domain, never the reverse) and re-exports them from here.
+from studio.domain.vocab import CommercialUse, MediaType, Operation
 from studio.versions import SCHEMA_VERSION, SchemaVersion
 
 # Registry ids: lowercase, segments separated by '.' or ':' (e.g. "comfyui", "comfyui.z_image_turbo.t2i").
@@ -39,36 +43,39 @@ AdapterName = Annotated[
     ),
 ]
 Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+# Names of environment variables an executor sets for itself (BindingSpec.managed_environment).
+EnvVarName = Annotated[str, StringConstraints(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$", max_length=128)]
+# One automatic-recovery limit: a non-negative integer, or None for "no automatic recovery of this kind".
+RecoveryLimit = Annotated[int | None, Field(strict=True, ge=0)]
+
+# Parameter names the domain treats as first-class creative fields (they feed the creative identity).
+# Mirrors studio.domain.production.RESERVED_CREATIVE_KEYS plus the design's payload names ``capability``
+# and ``duration_ms``; kept registry-local so the registry does not depend on the domain's internals.
+RESERVED_CREATIVE_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "operation",
+        "binding_id",
+        "capability",
+        "prompt",
+        "negative_prompt",
+        "width",
+        "height",
+        "fps",
+        "duration_s",
+        "duration_ms",
+        "seed",
+        "references",
+    }
+)
+# The ONLY reserved creative fields a binding may list in ``execution_only`` (user decision I-1(b), UD-6:
+# resolution and length may be adapted to resources). ``fps`` is never adaptable. Enforced by the loader.
+EXECUTION_ONLY_CREATIVE_ALLOWLIST: Final[frozenset[str]] = frozenset(
+    {"width", "height", "duration_s"}
+)
 
 
 class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-class Operation(StrEnum):
-    T2I = "t2i"
-    I2I = "i2i"
-    INPAINT = "inpaint"
-    T2V = "t2v"
-    I2V = "i2v"
-    V2V = "v2v"
-    UPSCALE = "upscale"
-    INTERP = "interp"
-    TTS = "tts"
-    MUSIC = "music"
-    SFX = "sfx"
-    ASR = "asr"
-    TRANSCODE = "transcode"
-    RENDER_TIMELINE = "render_timeline"
-
-
-class MediaType(StrEnum):
-    IMAGE = "image"
-    VIDEO = "video"
-    AUDIO = "audio"
-    TEXT = "text"
-    MASK = "mask"
-    TIMELINE = "timeline"
 
 
 class EngineKind(StrEnum):
@@ -114,13 +121,6 @@ class FrameRule(StrEnum):
         if frames < 1:
             return False
         return self is FrameRule.ANY or (frames - 1) % 8 == 0
-
-
-class CommercialUse(StrEnum):
-    YES = "yes"
-    CONDITIONAL = "conditional"
-    NO = "no"
-    UNKNOWN = "unknown"
 
 
 class FileRoot(StrEnum):
@@ -293,6 +293,22 @@ class Probe(_Strict):
     value: str = Field(min_length=1)
 
 
+class RecoveryPolicy(_Strict):
+    """Automatic-recovery limits of an engine (default) or of one binding (override).
+
+    ``None`` means no automatic recovery of that kind. There is deliberately NO default number
+    (UD-4, UD-7). A binding block REPLACES the engine block as a whole; fields are never merged
+    (``Registry.resolve_recovery``). The field names are shared with the domain's policy snapshot.
+    """
+
+    max_infrastructure_retries: RecoveryLimit = None
+    max_resumes: RecoveryLimit = None
+    max_resume_depth: RecoveryLimit = Field(
+        default=None,
+        description="cap on a chain of consecutive resumes; None = no resume-of-resume",
+    )
+
+
 class EngineSpec(_Strict):
     """Identifies a backend and what it can do in principle. Connection details live in configuration."""
 
@@ -305,6 +321,9 @@ class EngineSpec(_Strict):
     )
     operations: tuple[Operation, ...] = Field(min_length=1)
     probes: tuple[Probe, ...] = ()
+    recovery: RecoveryPolicy | None = Field(
+        default=None, description="default recovery limits for the engine's bindings; absent = none"
+    )
     notes: str = ""
 
 
@@ -336,6 +355,15 @@ class BindingSpec(_Strict):
     execution_only: tuple[str, ...] = Field(
         default=(),
         description="parameter keys excluded from spec_hash (architecture section 3)",
+    )
+    managed_environment: tuple[EnvVarName, ...] = Field(
+        default=(),
+        description="environment variables the executor sets itself: never task parameters, never "
+        "hashed, and never also listed in execution_only",
+    )
+    recovery: RecoveryPolicy | None = Field(
+        default=None,
+        description="replaces the engine's recovery block as a whole; absent = the engine's block",
     )
     resources: ResourceProfile
     template: TemplateRef | None = None

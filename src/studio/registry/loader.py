@@ -45,6 +45,20 @@ class RegistryError(Exception):
         super().__init__("\n".join(str(i) for i in issues))
 
 
+@dataclass(frozen=True)
+class ResolvedRecovery:
+    """The recovery limits that apply to one binding, and where they came from.
+
+    ``source`` is ``"binding:<id>"``, ``"engine:<id>"`` or ``"none"`` (no automatic recovery). A limit of
+    ``None`` means none of that kind. A later milestone builds the domain's policy snapshot from this.
+    """
+
+    source: str
+    max_infrastructure_retries: int | None = None
+    max_resumes: int | None = None
+    max_resume_depth: int | None = None
+
+
 @dataclass(frozen=True, eq=False)  # identity equality/hash: the read-only mappings are not hashable
 class Registry:
     engines: Mapping[str, EngineSpec]
@@ -62,6 +76,24 @@ class Registry:
 
     def bindings_of_engine(self, engine_id: str) -> list[BindingSpec]:
         return [b for b in self.bindings.values() if b.engine == engine_id]
+
+    def resolve_recovery(self, binding_id: str) -> ResolvedRecovery:
+        """A binding's ``recovery`` block replaces the engine's as a whole (no field merging); with
+        neither block there is no automatic recovery. Unknown ids raise ``KeyError``."""
+        binding = self.bindings[binding_id]
+        engine = self.engines.get(binding.engine)
+        if binding.recovery is not None:
+            source, block = f"binding:{binding.id}", binding.recovery
+        elif engine is not None and engine.recovery is not None:
+            source, block = f"engine:{engine.id}", engine.recovery
+        else:
+            return ResolvedRecovery(source="none")
+        return ResolvedRecovery(
+            source=source,
+            max_infrastructure_retries=block.max_infrastructure_retries,
+            max_resumes=block.max_resumes,
+            max_resume_depth=block.max_resume_depth,
+        )
 
 
 _SECTIONS: tuple[tuple[str, type[BaseModel]], ...] = (
