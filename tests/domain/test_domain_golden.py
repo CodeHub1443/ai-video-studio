@@ -16,16 +16,38 @@ import pytest
 
 from studio.domain.canonical import canonical_bytes, format_number
 from studio.domain.errors import DomainValidationError
+from studio.domain.fingerprint import (
+    EngineComponent,
+    Fingerprint,
+    FingerprintKind,
+    ModelComponent,
+    compute_fingerprint,
+    compute_task_fingerprint,
+    envelope,
+    task_payload,
+)
 
 GOLDEN = Path(__file__).resolve().parent / "golden" / "fingerprint_v2.json"
 DOC: dict[str, Any] = json.loads(GOLDEN.read_text(encoding="utf-8"))
 
 # Vector ids that must be present at this point of the implementation (design B.6 numbering).
-REQUIRED_IDS = {8, 10, 14}
+REQUIRED_IDS = {8, 10, 12, 13, 14}
 
 
 def _cases() -> list[tuple[int, dict[str, Any]]]:
     return [(v["id"], case) for v in DOC["vectors"] for case in v["cases"]]
+
+
+def _task_args(spec: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "identity": Fingerprint(
+            kind=FingerprintKind.CREATIVE_IDENTITY, digest=spec["identity_digest"]
+        ),
+        "execution": spec["execution"],
+        "models": [ModelComponent(**m) for m in spec["models"]],
+        "template_sha256": spec["template"],
+        "engine": EngineComponent(**spec["engine"]),
+    }
 
 
 def _produce(spec: dict[str, Any]) -> bytes:
@@ -34,7 +56,20 @@ def _produce(spec: dict[str, Any]) -> bytes:
         return canonical_bytes(spec["value"])
     if kind == "float_hex":
         return canonical_bytes(struct.unpack(">d", bytes.fromhex(spec["hex"]))[0])
+    if kind == "envelope":
+        return canonical_bytes(envelope(FingerprintKind(spec["kind"]), spec["payload"]))
+    if kind == "task_fingerprint":
+        payload = task_payload(**_task_args(spec))
+        return canonical_bytes(envelope(FingerprintKind.TASK_FINGERPRINT, payload))
     raise AssertionError(f"unknown golden input type {kind!r}")
+
+
+def _fingerprint(spec: dict[str, Any]) -> Fingerprint | None:
+    if spec["type"] == "envelope":
+        return compute_fingerprint(FingerprintKind(spec["kind"]), spec["payload"])
+    if spec["type"] == "task_fingerprint":
+        return compute_task_fingerprint(**_task_args(spec))
+    return None
 
 
 def test_golden_header() -> None:
@@ -60,6 +95,16 @@ def test_golden_case(vector_id: int, case: dict[str, Any]) -> None:
     digest = hashlib.sha256(expected).hexdigest()
     assert case["digest_python"] == digest
     assert case["digest_sha256sum"] == digest
+    fingerprint = _fingerprint(case["input"])
+    if fingerprint is not None:
+        assert fingerprint.digest == digest
+        assert fingerprint.complete is case.get("complete", True)
+
+
+def test_different_kinds_give_different_digests() -> None:
+    vector = next(v for v in DOC["vectors"] if v["id"] == 13)
+    digests = {case["digest_python"] for case in vector["cases"]}
+    assert len(digests) == len(vector["cases"]) == 2
 
 
 def test_rfc8785_samples_are_independently_derivable() -> None:

@@ -477,6 +477,104 @@
           }
         }
       ]
+    },
+    {
+      "id": 12,
+      "title": "An unknown model digest makes the task fingerprint incomplete",
+      "cases": [
+        {
+          "label": "model digest and size not recorded -> complete=false",
+          "input": {
+            "type": "task_fingerprint",
+            "identity_digest": "abababababababababababababababababababababababababababababababab",
+            "execution": {
+              "parameters": {},
+              "reserved": {}
+            },
+            "models": [
+              {
+                "model_id": "m.a",
+                "role": "unet",
+                "sha256": null,
+                "size_bytes": null
+              }
+            ],
+            "template": null,
+            "engine": {
+              "engine_id": "e.a",
+              "version": "1.0"
+            }
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"task_fingerprint\",\"payload\":{\"engine\":{\"engine_id\":\"e.a\",\"version\":\"1.0\"},\"execution\":{\"parameters\":{},\"reserved\":{}},\"identity\":\"abababababababababababababababababababababababababababababababab\",\"models\":[{\"model_id\":\"m.a\",\"role\":\"unet\",\"sha256\":null,\"size_bytes\":null}],\"template\":null}}",
+          "bin": "v12_01.bin",
+          "digest_python": "0c4b2ed6f52f657e8a41ab9cb6c020b253ff71cbef4915c17dd2d5a220b2fc99",
+          "digest_sha256sum": "0c4b2ed6f52f657e8a41ab9cb6c020b253ff71cbef4915c17dd2d5a220b2fc99",
+          "complete": false
+        },
+        {
+          "label": "model digest and size recorded -> complete=true",
+          "input": {
+            "type": "task_fingerprint",
+            "identity_digest": "abababababababababababababababababababababababababababababababab",
+            "execution": {
+              "parameters": {},
+              "reserved": {}
+            },
+            "models": [
+              {
+                "model_id": "m.a",
+                "role": "unet",
+                "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+                "size_bytes": 1234
+              }
+            ],
+            "template": null,
+            "engine": {
+              "engine_id": "e.a",
+              "version": "1.0"
+            }
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"task_fingerprint\",\"payload\":{\"engine\":{\"engine_id\":\"e.a\",\"version\":\"1.0\"},\"execution\":{\"parameters\":{},\"reserved\":{}},\"identity\":\"abababababababababababababababababababababababababababababababab\",\"models\":[{\"model_id\":\"m.a\",\"role\":\"unet\",\"sha256\":\"1111111111111111111111111111111111111111111111111111111111111111\",\"size_bytes\":1234}],\"template\":null}}",
+          "bin": "v12_02.bin",
+          "digest_python": "17363b799840af3bc408fe76deebbdb8f2eea882089e915b3f554edfeda3fa3f",
+          "digest_sha256sum": "17363b799840af3bc408fe76deebbdb8f2eea882089e915b3f554edfeda3fa3f",
+          "complete": true
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "The same payload with a different kind gives a different digest",
+      "cases": [
+        {
+          "label": "kind creative_identity",
+          "input": {
+            "type": "envelope",
+            "kind": "creative_identity",
+            "payload": {
+              "a": 1
+            }
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"a\":1}}",
+          "bin": "v13_01.bin",
+          "digest_python": "1e91b932e1696c5c87320de7add00dff890f0c5468462a2214fa0749de7d9424",
+          "digest_sha256sum": "1e91b932e1696c5c87320de7add00dff890f0c5468462a2214fa0749de7d9424"
+        },
+        {
+          "label": "kind task_fingerprint",
+          "input": {
+            "type": "envelope",
+            "kind": "task_fingerprint",
+            "payload": {
+              "a": 1
+            }
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"task_fingerprint\",\"payload\":{\"a\":1}}",
+          "bin": "v13_02.bin",
+          "digest_python": "c3a8f3f2c4616ed1ed651a4f68f9e5dfbef713a0fe421461dcadfd99bf209ce7",
+          "digest_sha256sum": "c3a8f3f2c4616ed1ed651a4f68f9e5dfbef713a0fe421461dcadfd99bf209ce7"
+        }
+      ]
     }
   ]
 }
