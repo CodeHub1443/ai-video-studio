@@ -9,3 +9,6 @@ dist/
 *.egg-info/
 .coverage
 htmlcov/
+.claude/settings.local.json
+.env
+.env.*
