@@ -1,0 +1,49 @@
+# Exact package set of the shared dev environment E:\AI_VIDEO_STUDIO\envs\studio-dev
+# Generated 2026-11-20 (B-05) with Python 3.12.10 on Windows 11; torch-free (ADR-0005).
+# Rebuild: <python3.12> -m venv <env> ; <env>\Scripts\python.exe -m pip install -r requirements/dev.lock.txt
+# The project itself is never installed into this environment; tools run with PYTHONPATH=src.
+alembic==1.20.1
+annotated-doc==0.0.7
+annotated-types==0.8.0
+anyio==4.16.0
+av==15.1.0
+certifi==2026.10.23
+colorama==0.4.6
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+hypothesis==6.170.17
+idna==3.20
+iniconfig==2.3.1
+Jinja2==3.1.6
+Mako==1.4.3
+markdown-it-py==4.3.0
+MarkupSafe==3.0.4
+mdurl==0.1.2
+nodeenv==1.12.0
+numpy==2.5.5
+nvidia-ml-py==13.615.71
+packaging==26.3
+pillow==11.3.0
+pluggy==1.7.0
+psutil==7.2.2
+pydantic==2.14.4
+pydantic-settings==2.16.3
+pydantic_core==2.50.5
+Pygments==2.21.0
+pyright==1.1.414
+pytest==8.4.2
+pytest-asyncio==1.5.0
+python-dotenv==1.2.4
+pywin32==312
+rich==14.3.4
+ruamel.yaml==0.18.17
+ruamel.yaml.clib==0.2.15
+ruff==0.17.6
+shellingham==1.5.4
+sortedcontainers==2.4.0
+SQLAlchemy==2.1.9
+typer==0.29.2
+typing-inspection==0.4.5
+typing_extensions==4.16.0
+websockets==15.0.1
