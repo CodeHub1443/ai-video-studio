@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+from studio.domain.assets import AssetRef
 from studio.domain.canonical import canonical_bytes, format_number
 from studio.domain.errors import DomainValidationError
 from studio.domain.fingerprint import (
@@ -26,16 +27,38 @@ from studio.domain.fingerprint import (
     envelope,
     task_payload,
 )
+from studio.domain.production import CreativeSpec, ExecutionSpec, duration_ms_from_seconds
+from studio.domain.vocab import Operation
+from studio.domain.workflow import TaskSpec
 
 GOLDEN = Path(__file__).resolve().parent / "golden" / "fingerprint_v2.json"
 DOC: dict[str, Any] = json.loads(GOLDEN.read_text(encoding="utf-8"))
 
-# Vector ids that must be present at this point of the implementation (design B.6 numbering).
-REQUIRED_IDS = {8, 10, 12, 13, 14}
+# Every vector of design B.6 (items 1-14) must be present.
+REQUIRED_IDS = set(range(1, 15))
 
 
 def _cases() -> list[tuple[int, dict[str, Any]]]:
     return [(v["id"], case) for v in DOC["vectors"] for case in v["cases"]]
+
+
+def _vector(vector_id: int) -> dict[str, Any]:
+    return next(v for v in DOC["vectors"] if v["id"] == vector_id)
+
+
+def _creative(spec: dict[str, Any]) -> CreativeSpec:
+    kwargs = {k: v for k, v in spec.items() if k not in ("operation", "duration_s", "references")}
+    if "duration_s" in spec:
+        kwargs["duration_ms"] = duration_ms_from_seconds(spec["duration_s"])
+    refs = tuple(AssetRef(**r) for r in spec.get("references", []))
+    return CreativeSpec(operation=Operation(spec["operation"]), references=refs, **kwargs)
+
+
+def _task(spec: dict[str, Any]) -> TaskSpec:
+    return TaskSpec(
+        creative=_creative(spec["spec"]),
+        execution=ExecutionSpec(parameters=spec.get("execution", {})),
+    )
 
 
 def _task_args(spec: dict[str, Any]) -> dict[str, Any]:
@@ -61,6 +84,21 @@ def _produce(spec: dict[str, Any]) -> bytes:
     if kind == "task_fingerprint":
         payload = task_payload(**_task_args(spec))
         return canonical_bytes(envelope(FingerprintKind.TASK_FINGERPRINT, payload))
+    if kind == "identity_spec":
+        creative = _creative(spec["spec"])
+        payload = creative.identity_payload(execution_only_reserved=spec["execution_only_reserved"])
+        return canonical_bytes(envelope(FingerprintKind.CREATIVE_IDENTITY, payload))
+    if kind == "task_spec":
+        task = _task(spec)
+        moved = spec["execution_only_reserved"]
+        payload = task_payload(
+            identity=task.identity_fingerprint(execution_only_reserved=moved),
+            execution=task.execution_payload(execution_only_reserved=moved),
+            models=[ModelComponent(**m) for m in spec["models"]],
+            template_sha256=spec["template"],
+            engine=EngineComponent(**spec["engine"]),
+        )
+        return canonical_bytes(envelope(FingerprintKind.TASK_FINGERPRINT, payload))
     raise AssertionError(f"unknown golden input type {kind!r}")
 
 
@@ -69,6 +107,16 @@ def _fingerprint(spec: dict[str, Any]) -> Fingerprint | None:
         return compute_fingerprint(FingerprintKind(spec["kind"]), spec["payload"])
     if spec["type"] == "task_fingerprint":
         return compute_task_fingerprint(**_task_args(spec))
+    if spec["type"] == "identity_spec":
+        task = TaskSpec(creative=_creative(spec["spec"]))
+        return task.identity_fingerprint(execution_only_reserved=spec["execution_only_reserved"])
+    if spec["type"] == "task_spec":
+        return _task(spec).task_fingerprint(
+            models=[ModelComponent(**m) for m in spec["models"]],
+            template_sha256=spec["template"],
+            engine=EngineComponent(**spec["engine"]),
+            execution_only_reserved=spec["execution_only_reserved"],
+        )
     return None
 
 
@@ -101,14 +149,40 @@ def test_golden_case(vector_id: int, case: dict[str, Any]) -> None:
         assert fingerprint.complete is case.get("complete", True)
 
 
-def test_different_kinds_give_different_digests() -> None:
-    vector = next(v for v in DOC["vectors"] if v["id"] == 13)
-    digests = {case["digest_python"] for case in vector["cases"]}
-    assert len(digests) == len(vector["cases"]) == 2
+def _digests(vector_id: int) -> list[str]:
+    return [c["digest_python"] for c in _vector(vector_id)["cases"] if "error" not in c]
+
+
+@pytest.mark.parametrize("vector_id", [2, 4])
+def test_equivalent_inputs_share_one_identity(vector_id: int) -> None:
+    digests = _digests(vector_id)
+    assert len(digests) == 2
+    assert len(set(digests)) == 1
+
+
+@pytest.mark.parametrize("vector_id", [9, 13])
+def test_distinct_inputs_have_distinct_digests(vector_id: int) -> None:
+    digests = _digests(vector_id)
+    assert len(digests) == 2
+    assert len(set(digests)) == 2
+
+
+def test_rejection_vectors_reject() -> None:
+    assert [c["error"] for c in _vector(5)["cases"]] == ["spec.reference_duplicate"]
+    errors = [c.get("error") for c in _vector(7)["cases"]]
+    assert errors == ["canonical.int_range", None]
+
+
+def test_execution_change_keeps_identity_and_changes_task_fingerprint() -> None:
+    identity_case, task_a, task_b = _vector(11)["cases"]
+    for task_case in (task_a, task_b):
+        embedded = json.loads(task_case["canonical_bytes"])["payload"]["identity"]
+        assert embedded == identity_case["digest_python"]
+    assert task_a["digest_python"] != task_b["digest_python"]
 
 
 def test_rfc8785_samples_are_independently_derivable() -> None:
-    vector = next(v for v in DOC["vectors"] if v["id"] == 14)
+    vector = _vector(14)
     assert len(vector["cases"]) >= 20
     for case in vector["cases"]:
         hexval = case["input"]["hex"]

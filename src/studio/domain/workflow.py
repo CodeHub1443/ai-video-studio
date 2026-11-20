@@ -7,12 +7,21 @@ DAG nodes that hold no GPU lease (architecture section 2).
 
 from __future__ import annotations
 
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
 from studio.domain.errors import ValidationIssue, fail
+from studio.domain.fingerprint import (
+    EngineComponent,
+    Fingerprint,
+    FingerprintKind,
+    ModelComponent,
+    compute_fingerprint,
+    compute_task_fingerprint,
+)
 from studio.domain.graph import topological_order
 from studio.domain.ids import (
     ROLE_RE,
@@ -25,7 +34,6 @@ from studio.domain.ids import (
     VersionId,
     check_id,
     check_optional_id,
-    check_sha256,
     check_text,
     check_unique_ids,
 )
@@ -56,9 +64,14 @@ def _check_aware(value: datetime | None, path: str) -> None:
 class TaskSpec:
     """One unit of work for one capability: a ``CreativeSpec`` plus an ``ExecutionSpec``.
 
-    Only ``creative`` is fingerprinted. ``creative.binding_id`` names the registry binding (capability);
-    the domain never looks it up. A task is *resolved* (``is_resolved``) when its seed, capability and
-    references are fixed; the architecture requires that before the first attempt.
+    The creative spec alone makes the identity (``identity_hash``, drives approval staleness); the task
+    fingerprint adds the execution parameters, models, template and engine (drives reproduction and caching).
+    ``creative.binding_id`` names the registry binding (capability); the domain never looks it up. A task is
+    *resolved* (``is_resolved``) when its seed, capability and references are fixed; the architecture requires
+    that before the first attempt.
+
+    ``execution_only_reserved`` is the set of reserved creative fields (``width``, ``height``, ``duration_s``)
+    that the binding declares execution-only (UD-6); the registry list is passed in by the caller.
     """
 
     creative: CreativeSpec
@@ -68,10 +81,41 @@ class TaskSpec:
     def is_resolved(self) -> bool:
         return self.creative.is_resolved
 
-    def fingerprint_input(self) -> dict[str, Any]:
-        """The structure a later milestone hashes into ``spec_hash``: resolved creative spec only.
-        Raises ``UnresolvedSpecError`` when not resolved. Execution parameters are excluded by design."""
-        return self.creative.canonical_form(resolved=True)
+    def identity_payload(self, *, execution_only_reserved: Collection[str] = ()) -> dict[str, Any]:
+        """Payload of the creative identity hash. Raises ``UnresolvedSpecError`` when not resolved."""
+        return self.creative.identity_payload(execution_only_reserved=execution_only_reserved)
+
+    def execution_payload(self, *, execution_only_reserved: Collection[str] = ()) -> dict[str, Any]:
+        """The execution component of the task fingerprint: the execution parameters plus the reserved
+        creative fields that the binding declared execution-only (moved out of the identity)."""
+        return {
+            "parameters": self.execution.parameters,
+            "reserved": self.creative.execution_reserved_values(execution_only_reserved),
+        }
+
+    def identity_fingerprint(self, *, execution_only_reserved: Collection[str] = ()) -> Fingerprint:
+        return compute_fingerprint(
+            FingerprintKind.CREATIVE_IDENTITY,
+            self.identity_payload(execution_only_reserved=execution_only_reserved),
+        )
+
+    def task_fingerprint(
+        self,
+        *,
+        models: Iterable[ModelComponent],
+        template_sha256: str | None,
+        engine: EngineComponent,
+        execution_only_reserved: Collection[str] = (),
+    ) -> Fingerprint:
+        """Identity, execution, models, template and engine as one fingerprint (``complete`` only if every
+        component is known)."""
+        return compute_task_fingerprint(
+            identity=self.identity_fingerprint(execution_only_reserved=execution_only_reserved),
+            execution=self.execution_payload(execution_only_reserved=execution_only_reserved),
+            models=models,
+            template_sha256=template_sha256,
+            engine=engine,
+        )
 
 
 # ---------------------------------------------------------------- jobs and attempts
@@ -90,15 +134,21 @@ class Job:
     task: TaskSpec
     state: JobState = JobState.QUEUED
     take_id: TakeId | None = None  # at most one job per take
-    spec_hash: str | None = None  # persisted with the resolved task
+    identity_hash: Fingerprint | None = None  # persisted with the resolved task
+    task_fingerprint: Fingerprint | None = None  # persisted with the resolved task
     max_infrastructure_retries: int = DEFAULT_MAX_INFRASTRUCTURE_RETRIES
 
     def __post_init__(self) -> None:
         check_id(self.job_id, "job.job_id")
         check_id(self.project_id, "job.project_id")
         check_optional_id(self.take_id, "job.take_id")
-        if self.spec_hash is not None:
-            check_sha256(self.spec_hash, "job.spec_hash")
+        for name, kind in (
+            ("identity_hash", FingerprintKind.CREATIVE_IDENTITY),
+            ("task_fingerprint", FingerprintKind.TASK_FINGERPRINT),
+        ):
+            value = getattr(self, name)
+            if value is not None and (not isinstance(value, Fingerprint) or value.kind is not kind):
+                fail(f"job.{name}", f"job.{name}", f"expected a {kind} fingerprint")
         if (
             isinstance(self.max_infrastructure_retries, bool)
             or not isinstance(self.max_infrastructure_retries, int)
@@ -112,8 +162,12 @@ class Job:
                     "job.task",
                     f"a {self.state} job needs a resolved task (seed persisted)",
                 )
-            if self.spec_hash is None:
-                fail("job.spec_hash", "job.spec_hash", f"a {self.state} job needs its spec_hash")
+            if self.identity_hash is None or self.task_fingerprint is None:
+                fail(
+                    "job.fingerprints",
+                    "job.identity_hash",
+                    f"a {self.state} job needs its identity_hash and task_fingerprint",
+                )
 
 
 @dataclass(frozen=True, kw_only=True)

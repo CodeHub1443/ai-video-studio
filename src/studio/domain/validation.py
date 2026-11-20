@@ -280,22 +280,37 @@ def _check_take_source(
             issues, "ref.mismatch", f"{where}.source_take_id", "source take belongs to another shot"
         )
     if take.origin is TakeOrigin.REPRODUCTION:
-        if None not in (take.spec_hash, source.spec_hash) and take.spec_hash != source.spec_hash:
+        if take.identity_hash != source.identity_hash:
             _issue(
-                issues, "recovery.reproduction", where, "a reproduction keeps the source spec_hash"
+                issues,
+                "recovery.reproduction",
+                where,
+                "a reproduction keeps the source identity_hash",
             )
-        if None not in (take.seed, source.seed) and take.seed != source.seed:
+        if take.seed != source.seed:
             _issue(issues, "recovery.reproduction", where, "a reproduction keeps the source seed")
+        exact = (
+            take.task_fingerprint == source.task_fingerprint
+            and take.task_fingerprint.complete
+            and source.task_fingerprint.complete
+        )
+        if take.exact is not exact:
+            _issue(
+                issues,
+                "recovery.reproduction_exact",
+                where,
+                "'exact' must be true exactly when both task fingerprints are complete and equal",
+            )
     elif take.origin is TakeOrigin.CREATIVE_REGENERATION:
-        if None not in (take.spec_hash, source.spec_hash) and take.spec_hash == source.spec_hash:
+        if take.identity_hash == source.identity_hash:
             _issue(
                 issues,
                 "recovery.regeneration",
                 where,
-                "a creative regeneration must differ in spec_hash",
+                "a creative regeneration must differ in identity_hash",
             )
     elif take.origin is TakeOrigin.RESOURCE_ADAPTATION:
-        if None not in (take.seed, source.seed) and take.seed != source.seed:
+        if take.seed != source.seed:
             _issue(
                 issues, "recovery.adaptation", where, "a resource adaptation keeps the source seed"
             )
@@ -423,10 +438,22 @@ def _check_workflow(s: DomainSnapshot, issues: list[ValidationIssue]) -> None:
             if take is None:
                 _issue(issues, "ref.missing", f"{where}.take_id", f"unknown take {job.take_id}")
             else:
-                if None not in (job.spec_hash, take.spec_hash) and job.spec_hash != take.spec_hash:
-                    _issue(issues, "ref.hash_mismatch", where, "job and take disagree on spec_hash")
+                if job.identity_hash is not None and job.identity_hash != take.identity_hash:
+                    _issue(
+                        issues, "ref.hash_mismatch", where, "job and take disagree on identity_hash"
+                    )
+                if (
+                    job.task_fingerprint is not None
+                    and job.task_fingerprint != take.task_fingerprint
+                ):
+                    _issue(
+                        issues,
+                        "ref.hash_mismatch",
+                        where,
+                        "job and take disagree on task_fingerprint",
+                    )
                 seed = job.task.creative.seed
-                if None not in (seed, take.seed) and seed != take.seed:
+                if seed is not None and seed != take.seed:
                     _issue(issues, "ref.seed_mismatch", where, "job and take disagree on seed")
         for ref in job.task.creative.references:
             if ref.version_id is not None and ref.version_id not in versions:

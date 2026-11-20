@@ -575,6 +575,448 @@
           "digest_sha256sum": "c3a8f3f2c4616ed1ed651a4f68f9e5dfbef713a0fe421461dcadfd99bf209ce7"
         }
       ]
+    },
+    {
+      "id": 1,
+      "title": "Minimal resolved T2I spec",
+      "cases": [
+        {
+          "label": "t2i with one free parameter",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "t2i",
+              "binding_id": "cap.t2i",
+              "prompt": "a red apple",
+              "width": 1024,
+              "height": 1024,
+              "seed": 42,
+              "parameters": {
+                "steps": 20
+              }
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.t2i\",\"duration_ms\":null,\"fps\":null,\"height\":1024,\"negative_prompt\":null,\"operation\":\"t2i\",\"parameters\":{\"steps\":20},\"prompt\":\"a red apple\",\"references\":[],\"seed\":\"42\",\"width\":1024}}",
+          "bin": "v01.bin",
+          "digest_python": "ce5c16e695a808f27aa83cb21847acb9d46516eb08e1ed1aba30c1b1cb1bd247",
+          "digest_sha256sum": "ce5c16e695a808f27aa83cb21847acb9d46516eb08e1ed1aba30c1b1cb1bd247"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "fps 24 and fps 24.0 give the same identity",
+      "cases": [
+        {
+          "label": "fps 24 (integer)",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "t2v",
+              "binding_id": "cap.t2v",
+              "prompt": "p",
+              "width": 512,
+              "height": 512,
+              "fps": 24,
+              "duration_s": 2,
+              "seed": 1
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.t2v\",\"duration_ms\":2000,\"fps\":{\"den\":1,\"num\":24},\"height\":512,\"negative_prompt\":null,\"operation\":\"t2v\",\"parameters\":{},\"prompt\":\"p\",\"references\":[],\"seed\":\"1\",\"width\":512}}",
+          "bin": "v02_01.bin",
+          "digest_python": "7ecf596d267c470b00533ceba78d386d103eea780bfce070808efb2ceec44b87",
+          "digest_sha256sum": "7ecf596d267c470b00533ceba78d386d103eea780bfce070808efb2ceec44b87"
+        },
+        {
+          "label": "fps 24.0 (float)",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "t2v",
+              "binding_id": "cap.t2v",
+              "prompt": "p",
+              "width": 512,
+              "height": 512,
+              "fps": 24.0,
+              "duration_s": 2,
+              "seed": 1
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.t2v\",\"duration_ms\":2000,\"fps\":{\"den\":1,\"num\":24},\"height\":512,\"negative_prompt\":null,\"operation\":\"t2v\",\"parameters\":{},\"prompt\":\"p\",\"references\":[],\"seed\":\"1\",\"width\":512}}",
+          "bin": "v02_02.bin",
+          "digest_python": "7ecf596d267c470b00533ceba78d386d103eea780bfce070808efb2ceec44b87",
+          "digest_sha256sum": "7ecf596d267c470b00533ceba78d386d103eea780bfce070808efb2ceec44b87"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "fps \"24000/1001\" is the reduced rational 24000/1001",
+      "cases": [
+        {
+          "label": "fps as text",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "t2v",
+              "binding_id": "cap.t2v",
+              "prompt": "p",
+              "width": 512,
+              "height": 512,
+              "fps": "24000/1001",
+              "duration_s": 2,
+              "seed": 1
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.t2v\",\"duration_ms\":2000,\"fps\":{\"den\":1001,\"num\":24000},\"height\":512,\"negative_prompt\":null,\"operation\":\"t2v\",\"parameters\":{},\"prompt\":\"p\",\"references\":[],\"seed\":\"1\",\"width\":512}}",
+          "bin": "v03.bin",
+          "digest_python": "27cb0ec9edb12d836e3a4a0ed3ca66c1c366e9cde4542a0ca0d8ea153aa58df8",
+          "digest_sha256sum": "27cb0ec9edb12d836e3a4a0ed3ca66c1c366e9cde4542a0ca0d8ea153aa58df8"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "The same references in two orders give the same identity",
+      "cases": [
+        {
+          "label": "authored order reference#1, reference#2, start_frame",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "i2v",
+              "binding_id": "cap.i2v",
+              "prompt": "p",
+              "width": 512,
+              "height": 512,
+              "seed": 7,
+              "references": [
+                {
+                  "role": "reference",
+                  "index": 1,
+                  "asset_id": "asset_a",
+                  "version_id": "ver_a",
+                  "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+                },
+                {
+                  "role": "reference",
+                  "index": 2,
+                  "asset_id": "asset_b",
+                  "version_id": "ver_b",
+                  "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                {
+                  "role": "start_frame",
+                  "index": 1,
+                  "asset_id": "asset_c",
+                  "version_id": "ver_c",
+                  "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+                }
+              ]
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.i2v\",\"duration_ms\":null,\"fps\":null,\"height\":512,\"negative_prompt\":null,\"operation\":\"i2v\",\"parameters\":{},\"prompt\":\"p\",\"references\":[{\"index\":1,\"role\":\"reference\",\"sha256\":\"1111111111111111111111111111111111111111111111111111111111111111\"},{\"index\":2,\"role\":\"reference\",\"sha256\":\"2222222222222222222222222222222222222222222222222222222222222222\"},{\"index\":1,\"role\":\"start_frame\",\"sha256\":\"3333333333333333333333333333333333333333333333333333333333333333\"}],\"seed\":\"7\",\"width\":512}}",
+          "bin": "v04_01.bin",
+          "digest_python": "85bf57c9b84bf909cbf2e64bc94c9ed444f2dc3daf1ef7e0e2de0c41f2ed5fbc",
+          "digest_sha256sum": "85bf57c9b84bf909cbf2e64bc94c9ed444f2dc3daf1ef7e0e2de0c41f2ed5fbc"
+        },
+        {
+          "label": "authored order start_frame, reference#2, reference#1",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "i2v",
+              "binding_id": "cap.i2v",
+              "prompt": "p",
+              "width": 512,
+              "height": 512,
+              "seed": 7,
+              "references": [
+                {
+                  "role": "start_frame",
+                  "index": 1,
+                  "asset_id": "asset_c",
+                  "version_id": "ver_c",
+                  "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+                },
+                {
+                  "role": "reference",
+                  "index": 2,
+                  "asset_id": "asset_b",
+                  "version_id": "ver_b",
+                  "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                {
+                  "role": "reference",
+                  "index": 1,
+                  "asset_id": "asset_a",
+                  "version_id": "ver_a",
+                  "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+                }
+              ]
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.i2v\",\"duration_ms\":null,\"fps\":null,\"height\":512,\"negative_prompt\":null,\"operation\":\"i2v\",\"parameters\":{},\"prompt\":\"p\",\"references\":[{\"index\":1,\"role\":\"reference\",\"sha256\":\"1111111111111111111111111111111111111111111111111111111111111111\"},{\"index\":2,\"role\":\"reference\",\"sha256\":\"2222222222222222222222222222222222222222222222222222222222222222\"},{\"index\":1,\"role\":\"start_frame\",\"sha256\":\"3333333333333333333333333333333333333333333333333333333333333333\"}],\"seed\":\"7\",\"width\":512}}",
+          "bin": "v04_02.bin",
+          "digest_python": "85bf57c9b84bf909cbf2e64bc94c9ed444f2dc3daf1ef7e0e2de0c41f2ed5fbc",
+          "digest_sha256sum": "85bf57c9b84bf909cbf2e64bc94c9ed444f2dc3daf1ef7e0e2de0c41f2ed5fbc"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "A duplicate (role, index) is rejected",
+      "cases": [
+        {
+          "label": "two references with role reference and index 1",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "i2v",
+              "binding_id": "cap.i2v",
+              "prompt": "p",
+              "width": 512,
+              "height": 512,
+              "seed": 7,
+              "references": [
+                {
+                  "role": "reference",
+                  "index": 1,
+                  "asset_id": "asset_a",
+                  "version_id": "ver_a",
+                  "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+                },
+                {
+                  "role": "reference",
+                  "index": 1,
+                  "asset_id": "asset_b",
+                  "version_id": "ver_b",
+                  "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+                }
+              ]
+            },
+            "execution_only_reserved": []
+          },
+          "error": "spec.reference_duplicate"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Seed 2**64-1 is written as a decimal string",
+      "cases": [
+        {
+          "label": "largest seed",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "t2i",
+              "binding_id": "cap.t2i",
+              "prompt": "s",
+              "width": 64,
+              "height": 64,
+              "seed": 18446744073709551615
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.t2i\",\"duration_ms\":null,\"fps\":null,\"height\":64,\"negative_prompt\":null,\"operation\":\"t2i\",\"parameters\":{},\"prompt\":\"s\",\"references\":[],\"seed\":\"18446744073709551615\",\"width\":64}}",
+          "bin": "v06.bin",
+          "digest_python": "5b5fd1d8c4d82b4b62d758ef9f709ba6321ca750d05742b80f634ccb180c48b8",
+          "digest_sha256sum": "5b5fd1d8c4d82b4b62d758ef9f709ba6321ca750d05742b80f634ccb180c48b8"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "A free parameter 2**53 is rejected (2**53-1 is accepted)",
+      "cases": [
+        {
+          "label": "parameter 2**53",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "t2i",
+              "binding_id": "cap.t2i",
+              "prompt": "s",
+              "width": 64,
+              "height": 64,
+              "seed": 3,
+              "parameters": {
+                "big": 9007199254740992
+              }
+            },
+            "execution_only_reserved": []
+          },
+          "error": "canonical.int_range"
+        },
+        {
+          "label": "parameter 2**53-1",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "t2i",
+              "binding_id": "cap.t2i",
+              "prompt": "s",
+              "width": 64,
+              "height": 64,
+              "seed": 3,
+              "parameters": {
+                "big": 9007199254740991
+              }
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.t2i\",\"duration_ms\":null,\"fps\":null,\"height\":64,\"negative_prompt\":null,\"operation\":\"t2i\",\"parameters\":{\"big\":9007199254740991},\"prompt\":\"s\",\"references\":[],\"seed\":\"3\",\"width\":64}}",
+          "bin": "v07_02.bin",
+          "digest_python": "5e9956272002f8480b975f0e087a8ec6d6da5590d718edd53ba51753d06a668b",
+          "digest_sha256sum": "5e9956272002f8480b975f0e087a8ec6d6da5590d718edd53ba51753d06a668b"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Prompt e-acute NFC and NFD are different identities",
+      "cases": [
+        {
+          "label": "NFC U+00E9",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "t2i",
+              "binding_id": "cap.t2i",
+              "prompt": "\u00e9",
+              "width": 64,
+              "height": 64,
+              "seed": 3
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.t2i\",\"duration_ms\":null,\"fps\":null,\"height\":64,\"negative_prompt\":null,\"operation\":\"t2i\",\"parameters\":{},\"prompt\":\"\u00e9\",\"references\":[],\"seed\":\"3\",\"width\":64}}",
+          "bin": "v09_01.bin",
+          "digest_python": "d1dfa8ee646bf7ed2be127e08ee163c60d425864af0059b03be0cc63fdc0eb65",
+          "digest_sha256sum": "d1dfa8ee646bf7ed2be127e08ee163c60d425864af0059b03be0cc63fdc0eb65"
+        },
+        {
+          "label": "NFD U+0065 U+0301",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "t2i",
+              "binding_id": "cap.t2i",
+              "prompt": "e\u0301",
+              "width": 64,
+              "height": 64,
+              "seed": 3
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.t2i\",\"duration_ms\":null,\"fps\":null,\"height\":64,\"negative_prompt\":null,\"operation\":\"t2i\",\"parameters\":{},\"prompt\":\"e\u0301\",\"references\":[],\"seed\":\"3\",\"width\":64}}",
+          "bin": "v09_02.bin",
+          "digest_python": "9dc97f5024dd047438408b3b33bc1b390aec16856b25d80e7423270f8dba48fa",
+          "digest_sha256sum": "9dc97f5024dd047438408b3b33bc1b390aec16856b25d80e7423270f8dba48fa"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "An execution parameter change keeps the identity and changes the task fingerprint",
+      "cases": [
+        {
+          "label": "creative identity of the task (digest is embedded in the next two cases)",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "t2i",
+              "binding_id": "cap.t2i",
+              "prompt": "q",
+              "width": 64,
+              "height": 64,
+              "seed": 5
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.t2i\",\"duration_ms\":null,\"fps\":null,\"height\":64,\"negative_prompt\":null,\"operation\":\"t2i\",\"parameters\":{},\"prompt\":\"q\",\"references\":[],\"seed\":\"5\",\"width\":64}}",
+          "bin": "v11_01.bin",
+          "digest_python": "1c62b8a0f8b00c0b7115aef91d832ee932840a82931a7832e9c81f1d03bcae3f",
+          "digest_sha256sum": "1c62b8a0f8b00c0b7115aef91d832ee932840a82931a7832e9c81f1d03bcae3f"
+        },
+        {
+          "label": "task fingerprint, execution offload=true",
+          "input": {
+            "type": "task_spec",
+            "spec": {
+              "operation": "t2i",
+              "binding_id": "cap.t2i",
+              "prompt": "q",
+              "width": 64,
+              "height": 64,
+              "seed": 5
+            },
+            "execution": {
+              "offload": true
+            },
+            "execution_only_reserved": [],
+            "models": [
+              {
+                "model_id": "m.a",
+                "role": "unet",
+                "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+                "size_bytes": 10
+              }
+            ],
+            "template": null,
+            "engine": {
+              "engine_id": "e.a",
+              "version": "1.0"
+            }
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"task_fingerprint\",\"payload\":{\"engine\":{\"engine_id\":\"e.a\",\"version\":\"1.0\"},\"execution\":{\"parameters\":{\"offload\":true},\"reserved\":{}},\"identity\":\"1c62b8a0f8b00c0b7115aef91d832ee932840a82931a7832e9c81f1d03bcae3f\",\"models\":[{\"model_id\":\"m.a\",\"role\":\"unet\",\"sha256\":\"4444444444444444444444444444444444444444444444444444444444444444\",\"size_bytes\":10}],\"template\":null}}",
+          "bin": "v11_02.bin",
+          "digest_python": "decab2fd953a63c828d8c85534709f888504cd54464ff9bb6f0aa035a91b304e",
+          "digest_sha256sum": "decab2fd953a63c828d8c85534709f888504cd54464ff9bb6f0aa035a91b304e"
+        },
+        {
+          "label": "task fingerprint, execution offload=false",
+          "input": {
+            "type": "task_spec",
+            "spec": {
+              "operation": "t2i",
+              "binding_id": "cap.t2i",
+              "prompt": "q",
+              "width": 64,
+              "height": 64,
+              "seed": 5
+            },
+            "execution": {
+              "offload": false
+            },
+            "execution_only_reserved": [],
+            "models": [
+              {
+                "model_id": "m.a",
+                "role": "unet",
+                "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+                "size_bytes": 10
+              }
+            ],
+            "template": null,
+            "engine": {
+              "engine_id": "e.a",
+              "version": "1.0"
+            }
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"task_fingerprint\",\"payload\":{\"engine\":{\"engine_id\":\"e.a\",\"version\":\"1.0\"},\"execution\":{\"parameters\":{\"offload\":false},\"reserved\":{}},\"identity\":\"1c62b8a0f8b00c0b7115aef91d832ee932840a82931a7832e9c81f1d03bcae3f\",\"models\":[{\"model_id\":\"m.a\",\"role\":\"unet\",\"sha256\":\"4444444444444444444444444444444444444444444444444444444444444444\",\"size_bytes\":10}],\"template\":null}}",
+          "bin": "v11_03.bin",
+          "digest_python": "caa7943101dc56e895cf177469b0f015e0bf540a762065538af9d1000e5f52f6",
+          "digest_sha256sum": "caa7943101dc56e895cf177469b0f015e0bf540a762065538af9d1000e5f52f6"
+        }
+      ]
     }
   ]
 }

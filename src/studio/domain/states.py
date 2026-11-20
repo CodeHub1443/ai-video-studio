@@ -42,7 +42,7 @@ class ShotState(StrEnum):
 
 
 class TakeState(StrEnum):
-    PLANNED = "planned"  # identity, resolved spec hash and seed exist; no job yet
+    PLANNED = "planned"  # identity_hash, task_fingerprint and seed exist; no job yet
     GENERATING = "generating"  # its job is not terminal (includes retries and waiting)
     PRODUCED = "produced"  # outputs ingested, awaiting review
     APPROVED = "approved"
