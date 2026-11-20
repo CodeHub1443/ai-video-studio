@@ -25,7 +25,6 @@
       "Bash(git fetch:*)",
       "Bash(git pull:*)",
       "Bash(git merge:*)",
-      "Bash(git rebase:*)",
       "Bash(git cherry-pick:*)",
       "Bash(git checkout:*)",
       "Bash(git switch:*)",
@@ -44,7 +43,9 @@
       "Bash(curl:*)",
       "Bash(wget:*)",
       "Bash(ffmpeg:*)",
-      "Bash(nvidia-smi:*)"
+      "Bash(nvidia-smi:*)",
+      "Bash(git -C *)",
+      "Bash(git config *)"
     ],
     "deny": [
       "Bash(git push --force:*)",
@@ -62,7 +63,19 @@
       "Bash(rm -r:*)",
       "Read(./.env)",
       "Read(./.env.*)",
-      "Read(./secrets/**)"
+      "Read(./secrets/**)",
+      "Bash(git push *--force*)",
+      "Bash(git push * -f)",
+      "Bash(git push * -f *)",
+      "Bash(git push * +*)",
+      "Bash(git push *--delete*)",
+      "Bash(git push * -d *)",
+      "Bash(git push *--mirror*)",
+      "Bash(git reset *--hard*)",
+      "Bash(git checkout -- *)",
+      "Bash(git checkout * -- *)",
+      "Bash(git branch * -D *)",
+      "Bash(git rebase *)"
     ]
   }
 }
