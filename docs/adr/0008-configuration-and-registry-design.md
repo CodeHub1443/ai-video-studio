@@ -1,21 +1,23 @@
 # ADR-0008: Configuration and registry design
 
-**Status: PROPOSED, awaiting approval.** This ADR as a whole is not accepted. It records (A) the points the
-user has directed or approved, (B) the implementer's own proposals that nobody has approved, and (C) open
-items. Nothing here has been executed, type-checked, linted or tested. Accepted ADRs (0001-0007) are not
-modified by it; proposed changes to them are in ADR-0009.
+**Status: Partially accepted (2026-11-20): D-1..D-8 (UD-9) and A-1..A-6 (I-10) accepted; P-1..P-14 and the open items proposed.**
+Group A below is accepted. Group B (proposals) and group C (open items) are not accepted. Accepted ADRs
+(0001-0007) are not modified by this ADR; proposed changes to them are in
+[ADR-0009](0009-proposed-amendments-to-accepted-adrs.md) and are PROPOSED. Nothing here has been executed,
+type-checked, linted or tested.
 
 ## Context
 M0.2 needs typed settings and a model/capability registry consistent with ADR-0001..0007 under A1 (no
 execution, no I/O at construction time that touches external systems). Two review rounds of the M0.2 draft
-led to the points below.
+led to the points below. UD-9 accepted decisions D-1..D-8; I-10 (UD-12) confirmed A-1..A-6 as accepted user
+directions.
 
-## A. Directed or approved by the user
+## A. Accepted
 Source: the M0.2 revision brief, the six checks of the verification brief, and the eight decisions of the
 final-revision brief. The implementer did not receive the original review text; each item is quoted from
 those briefs.
 
-From the M0.2 revision brief (required changes):
+From the M0.2 revision brief (required changes; accepted user directions, I-10):
 - A-1 `assets\` is read-only originals; studio output writes are confined to a dedicated subfolder.
 - A-2 Explicit external write-scope declarations and guards; only the ComfyUI output and LTX video namespaces.
 - A-3 Resource values may be `null` with explicit provenance; no fabricated estimates; registry-to-hardware
@@ -27,7 +29,7 @@ From the M0.2 revision brief (required changes):
 - A-6 Consistent schema versions; no mutable nested values in frozen models; `log_level` and `ltx_python`
   validation corrected; package-installed config-path assumption fixed; stale references and README fixed.
 
-From the final-revision brief (eight decisions):
+From the final-revision brief (eight decisions; accepted, UD-9):
 - D-1 Admission is blocked whenever any hard-gate requirement is unknown: VRAM, RAM and commit headroom,
   for CPU and GPU workloads according to their declared requirements.
 - D-2 All approved output namespaces are pinned; configurable values that could broaden them are removed.
@@ -44,30 +46,42 @@ From the final-revision brief (eight decisions):
   injection at the admission boundary.
 - D-8 Accepted ADRs are immutable; changes go through a superseding ADR or a clearly marked proposed amendment.
 
-## B. Implementer proposals (NOT approved)
+## B. Implementer proposals (PROPOSED; none accepted)
+Each carries the recommendation of the M0.3a design (docs/design/m0.3a-domain-amendments.md, section F.1).
+These P-n belong to the ADR-0008 series, not to ADR-0010.
 - P-1 Segment hardening details beyond drives/streams: reserved device names, 8.3 short-name rejection,
-  trailing dot/space, length limits.
+  trailing dot/space, length limits. Recommendation: accept.
 - P-2 `authorize` refuses mutating operations on existing files with more than one hard link.
-- P-3 An empty `STUDIO_ENV` is an error rather than "unset".
+  Recommendation: accept, with fail-closed link counting (an unknown link count denies) and the READ rule of
+  U-16.
+- P-3 An empty `STUDIO_ENV` is an error rather than "unset". Recommendation: accept.
 - P-4 Config-folder resolution: `STUDIO_CONFIG_DIR`, else a source checkout detected by `pyproject.toml` +
-  `studio.toml`, else none.
-- P-5 The per-operation allowed input/output media table in `loader.py`.
+  `studio.toml`, else none. Recommendation: accept.
+- P-5 The per-operation allowed input/output media table in `loader.py`. Recommendation: accept as
+  provisional (widen only with a reason).
 - P-6 `ltx_python` must be named `python.exe` and not lie in a studio root, but may be outside `ltx_repo`.
+  Recommendation: accept.
 - P-7 Test sandbox must be at least two levels below the drive root; `registry_dir` is not confined by it;
-  `test_sandbox_root` is rejected outside test.
-- P-8 `Quantity` bases (`unknown`, `observed`, `file_size`, `measured`) and the rule that a value needs a source.
+  `test_sandbox_root` is rejected outside test. Recommendation: accept, extended by the protected-real-roots
+  rule (U-17).
+- P-8 `Quantity` bases (`unknown`, `observed`, `file_size`, `measured`) and the rule that a value needs a
+  source. Recommendation: accept.
 - P-9 Registry loader: 1 MB file cap, symlinked files/folders rejected, other files reported as ignored.
+  Recommendation: accept, plus reporting ignored directories and YAML-named non-files.
 - P-10 Read access to the protected LTX folders is denied for every actor until D11 is decided.
-- P-11 A hardware profile may be `provisional = false` only with a `calibration_ref`.
-- P-12 `log_level` accepts any case, plus `CRITICAL`, `WARN` and `FATAL` aliases.
-- P-13 `.` as a model path only for `format: directory`.
+  Recommendation: accept until D11.
+- P-11 A hardware profile may be `provisional = false` only with a `calibration_ref`. Recommendation: accept.
+- P-12 `log_level` accepts any case, plus `CRITICAL`, `WARN` and `FATAL` aliases. Recommendation: accept.
+- P-13 `.` as a model path only for `format: directory`. Recommendation: accept.
 - P-14 The `Authorization` object and `revalidate` as the shape of the mandatory gate (D-4 fixes the
-  requirement, not this API).
+  requirement, not this API). Recommendation: accept, with hardening against forged or copied
+  authorizations and fail-closed handling of unknown file identity.
 
 ## C. Open items (not decided; nothing here is presented as fact)
 - U-1 `prod` behaviour: needs its own design and approval (disabled until then).
 - U-2 D6 (hardlink vs copy-always) is open, and ADR-0006's "move" and hardlink read-only-attribute steps
-  conflict with D-3 (see ADR-0009).
+  conflict with D-3 (see ADR-0009). Direction: copy-always through M0.x by user decision (I-4); the ADR-0006
+  amendment itself is PROPOSED in ADR-0009.
 - U-3 Source gap: the original review text and the original "six decisions" list were not available to the
   implementer; group A was reconstructed from the briefs.
 - U-4 The pinned ComfyUI/LTX namespaces restate ADR-0002/0003 and are unverified against what the engines
@@ -88,9 +102,24 @@ From the final-revision brief (eight decisions):
 - U-12 ADR-0003's "anything tracked by Git" deny cannot be represented without Git access; directories above
   a scope root (workspace bootstrap) are outside every scope.
 - U-13 Nothing in M0.2 has been executed, type-checked, linted or tested.
+- U-14 (new) Calibration admission: under D-1 (unknown never passes) no binding can ever run to be measured,
+  so a calibration path is needed. The user chose the direction of an explicit calibration job class (I-6),
+  but the amendment of the accepted D-1 stays PROPOSED in
+  [ADR-0009](0009-proposed-amendments-to-accepted-adrs.md) (ADR-0007 item 3) until the user accepts ADR-0009.
+  D-1 is unchanged until then.
+- U-15 (new) Engine read access: LTX must read studio-provided prompt and start-image files (ADR-0003) and
+  use TEMP/HF redirect locations, but the policy denies engine reads outside the engine's own namespace. The
+  user chose the direction of a handoff READ scope and an engine scratch scope under the studio cache root,
+  with HF offline (I-7), but the amendment of the accepted D-2/D-3 stays PROPOSED in ADR-0009 (ADR-0003
+  item 4) until the user accepts ADR-0009. D-2 and D-3 are unchanged until then.
+- U-16 (new) READ of multi-link files. Direction (I-13): refuse in studio-owned and engine scopes, flag in
+  read-only scopes. Proposed, with P-2.
+- U-17 (new) Test isolation must protect the configured real roots, not only the built-in defaults.
+  Proposed, with P-7.
 
 ## Consequences
 - Settings, access policy and registry are testable without devices once execution is authorized.
 - Every shipped binding is currently not admissible, by design, until requirements are measured and the
   profile states RAM and commit limits.
 - Test configurations must name a sandbox and place every path and tool inside it.
+- Group B and the open items bind nobody until the user accepts them.
