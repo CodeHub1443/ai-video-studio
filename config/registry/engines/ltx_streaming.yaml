@@ -1,0 +1,13 @@
+schema_version: 1
+id: ltx_streaming
+display_name: LTX-2.5 streaming runtime (render.py)
+kind: process
+adapter: studio.engines.ltx_streaming.LtxExecutor   # adapter arrives in a later milestone; name only
+operations: [t2v, i2v]
+probes:
+  - {kind: cli_option, value: --image}
+  - {kind: cli_option, value: --prefix}
+  - {kind: cli_option, value: --category}
+notes: >
+  Driven only through its unchanged render.py CLI in its own venv (ADR-0003). Frames must be 8k+1 and
+  dimensions multiples of 32. Negative prompts have no effect. Native audio.

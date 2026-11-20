@@ -1,0 +1,7 @@
+# Overlay applied when STUDIO_ENV=test (or env="test"). It is a safety default, not a full test config:
+# a test must also give test_sandbox_root and place every path and the ffmpeg/ffprobe executables inside
+# it (see docs/configuration.md). Anything outside the sandbox is refused.
+
+[comfyui]
+# Never the real ComfyUI port (8188). Nothing is expected to listen here; env=test must not connect anyway.
+port = 18188

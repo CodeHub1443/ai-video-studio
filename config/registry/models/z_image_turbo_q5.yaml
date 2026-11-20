@@ -1,0 +1,11 @@
+schema_version: 1
+id: z_image_turbo_q5
+display_name: Z-Image-Turbo Q5_K_S
+kind: diffusion
+family: z-image-turbo
+format: gguf
+quantization: Q5_K_S
+license: {id: unknown, commercial: unknown, notes: "Open decision D9: confirm before commercial delivery."}
+files:
+  - {root: models, path: image/diffusion_models/z_image_turbo-Q5_K_S.gguf, role: diffusion_model}
+notes: Metadata only. The file stays where ComfyUI reads it (extra_model_paths.yaml); it is never copied.

@@ -1,0 +1,33 @@
+# Hardware profile: RTX 3050 6 GB laptop (WDDM driver; per-process VRAM is not reported).
+# ALL THRESHOLDS BELOW ARE PROVISIONAL (ADR-0007): they are the design's starting values, NOT measured
+# or calibrated. They stay provisional until the authorized calibration milestone M3.2 records a run;
+# only then may provisional become false, and only together with calibration_ref.
+# Admission rule: S1.free_min >= need_vram + new_context_term + vram_margin  (no double counting).
+
+schema_version = 1
+name = "rtx3050-6gb"
+description = "Single 6 GB GPU shared with the Windows desktop"
+gpu_vram_total_gb = 6.0   # nominal; NVML is authoritative at run time
+# system_ram_gb and commit_limit_gb are intentionally absent: unknown, not guessed. Because unknown never
+# passes admission, NO binding is admissible against this profile until both are stated by the owner (or
+# measured) and each binding's own requirements are known.
+gpu_slots = 1
+allow_media_during_inference = false
+provisional = true
+
+[thresholds]
+vram_margin_gb = 0.3
+vram_jitter_mb = 128
+window_samples = 5
+window_interval_s = 1.0
+default_cuda_context_mb = 400
+comfy_reserved_max_mb = 256
+ram_reserve_gb = 4.0
+commit_reserve_gb = 2.0
+release_timeout_s = 90.0
+released_validity_s = 10.0
+queue_poll_interval_s = 1.0
+return_vram_tolerance_mb = 128
+return_vram_deadline_s = 30.0
+return_ram_deadline_s = 60.0
+util_baseline_margin_pct = 30.0

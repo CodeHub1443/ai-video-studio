@@ -1,0 +1,9 @@
+schema_version: 1
+id: ae_vae
+display_name: ae.safetensors (image VAE)
+kind: vae
+family: flux-ae
+format: safetensors
+license: {id: unknown, commercial: unknown, notes: "Open decision D9."}
+files:
+  - {root: models, path: image/vae/ae.safetensors, role: vae}

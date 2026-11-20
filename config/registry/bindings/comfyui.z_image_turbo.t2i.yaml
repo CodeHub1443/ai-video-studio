@@ -1,0 +1,27 @@
+schema_version: 1
+id: comfyui.z_image_turbo.t2i
+display_name: Z-Image-Turbo text-to-image (ComfyUI)
+engine: comfyui
+operation: t2i
+models: [z_image_turbo_q5, qwen3_4b_q8, ae_vae]
+inputs: []
+outputs:
+  - {role: image, media_type: image}
+constraints:
+  dim_multiple: 16          # UNVERIFIED: must be confirmed against the saved workflow (M2.1)
+features:
+  negative_prompt: none
+determinism: perceptual
+execution_only: []
+resources:
+  gpu: exclusive
+  # Resource needs are UNKNOWN (null), not estimated: no calibration run exists (M3.x). While vram_gb,
+  # ram_gb or commit_gb is unknown this binding is NOT admissible (studio.registry.compat). No guesses.
+  vram_gb: {value: null, basis: unknown}
+  ram_gb: {value: null, basis: unknown}
+  commit_gb: {value: null, basis: unknown}
+  est_minutes: {value: null, basis: unknown}
+  notes: Model files total about 9 GB and ComfyUI offloads, so file size alone does not bound VRAM.
+template:
+  status: unresolved        # resolved in M2.1; the template file does not exist yet
+  hint: Z-Image-Turbo text-to-image, ComfyUI API format

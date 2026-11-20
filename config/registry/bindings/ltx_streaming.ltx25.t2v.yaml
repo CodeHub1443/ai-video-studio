@@ -1,0 +1,30 @@
+schema_version: 1
+id: ltx_streaming.ltx25.t2v
+display_name: LTX-2.5 text-to-video with native audio
+engine: ltx_streaming
+operation: t2v
+models: [ltx25_22b]
+inputs: []
+outputs:
+  - {role: video, media_type: video}
+constraints:
+  dim_multiple: 32
+  frame_rule: "8k+1"
+features:
+  negative_prompt: none      # negative prompts have no effect in this runtime
+  native_audio: true
+  resume: true               # stage-1 artifact reuse (--reuse-stage1)
+  preview: true
+determinism: perceptual
+execution_only: [SYNC_S1, TEMP, TMP, HF_HOME]   # UNVERIFIED: that SYNC_S1 does not change output
+resources:
+  gpu: exclusive
+  # Memory needs are UNKNOWN (null): the earlier 5.5 / 16 / 24 GB figures were guesses and were removed.
+  # Whether the pipeline fits 6 GB with SYNC_S1 is an unverified assumption. Not admissible until measured.
+  vram_gb: {value: null, basis: unknown}
+  ram_gb: {value: null, basis: unknown}
+  commit_gb: {value: null, basis: unknown}
+  est_minutes:
+    value: 5.8
+    basis: observed
+    source: "owner-reported single run (stage-1 only, 256x384, 6.08 s clip); not reproduced or calibrated, do not extrapolate"

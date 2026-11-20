@@ -1,0 +1,27 @@
+schema_version: 1
+id: ltx_streaming.ltx25.i2v
+display_name: LTX-2.5 image-to-video with native audio
+engine: ltx_streaming
+operation: i2v
+models: [ltx25_22b]
+inputs:
+  - {role: start_frame, media_type: image, required: true}
+outputs:
+  - {role: video, media_type: video}
+constraints:
+  dim_multiple: 32
+  frame_rule: "8k+1"
+features:
+  negative_prompt: none
+  native_audio: true
+  resume: true
+  preview: true
+determinism: perceptual
+execution_only: [SYNC_S1, TEMP, TMP, HF_HOME]   # UNVERIFIED: that SYNC_S1 does not change output
+resources:
+  gpu: exclusive
+  # Memory and duration are UNKNOWN (null), not estimated. Not admissible until measured.
+  vram_gb: {value: null, basis: unknown}
+  ram_gb: {value: null, basis: unknown}
+  commit_gb: {value: null, basis: unknown}
+  est_minutes: {value: null, basis: unknown}

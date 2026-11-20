@@ -1,0 +1,10 @@
+schema_version: 1
+id: qwen3_4b_q8
+display_name: Qwen3-4B Q8_0 (Z-Image text encoder)
+kind: text_encoder
+family: qwen3
+format: gguf
+quantization: Q8_0
+license: {id: unknown, commercial: unknown, notes: "Open decision D9."}
+files:
+  - {root: models, path: image/text_encoders/Qwen3-4B-Q8_0.gguf, role: text_encoder}

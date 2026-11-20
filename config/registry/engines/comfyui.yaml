@@ -1,0 +1,10 @@
+schema_version: 1
+id: comfyui
+display_name: ComfyUI (externally managed)
+kind: service
+adapter: studio.engines.comfyui.ComfyUIExecutor   # adapter arrives in a later milestone; name only
+operations: [t2i]
+probes: []   # node-class probes are added after /object_info has been inspected (authorized later)
+notes: >
+  ComfyUI 0.45.0 at 127.0.0.1:8188, started by the user. The studio never starts, stops or reconfigures
+  it (ADR-0002). Connection details live in configuration, not here.

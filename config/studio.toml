@@ -1,0 +1,41 @@
+# Base studio configuration. Every value shown is the built-in default for the current Windows machine,
+# so this file may stay empty. Overlays: studio.<env>.toml, selected by STUDIO_ENV=dev|test (or the
+# env= argument). prod is DISABLED pending a separate approved design. Environment variables override files: STUDIO_PATHS__WORKSPACE_ROOT, STUDIO_COMFYUI__PORT...
+# Loading this file creates nothing and contacts nothing.
+
+# `env` is selected with STUDIO_ENV or the env= argument. It is rejected if set in a file.
+log_level = "INFO"                 # DEBUG | INFO | WARNING | ERROR | CRITICAL (case-insensitive)
+hardware_profile = "rtx3050-6gb"   # -> config/hardware/<name>.toml
+
+[paths]
+# Studio-managed roots derive from workspace_root unless set explicitly.
+# workspace_root     = 'E:\AI_VIDEO_STUDIO'
+# projects_root      = 'E:\AI_VIDEO_STUDIO\projects'
+# assets_root        = 'E:\AI_VIDEO_STUDIO\assets'     # READ-ONLY originals: never written by the studio
+# outputs_root       = 'E:\AI_VIDEO_STUDIO\outputs'    # the studio writes only outputs_root\studio (pinned)
+# cache_root         = 'E:\AI_VIDEO_STUDIO\cache'
+# logs_root          = 'E:\AI_VIDEO_STUDIO\logs'
+# data_root          = 'E:\AI_VIDEO_STUDIO\data'
+# External roots (read-only for the studio, except declared engine output namespaces):
+# models_root        = 'E:\AI_VIDEO_STUDIO\models'
+# comfyui_root       = 'E:\AI_VIDEO_STUDIO\comfyui\ComfyUI'
+# comfyui_output_dir = 'E:\AI_VIDEO_STUDIO\comfyui\ComfyUI\output'
+# ltx_repo           = 'E:\Dev\ltx25-igpu-streaming'
+# ltx_python         = 'E:\Dev\ltx25-igpu-streaming\.venv\Scripts\python.exe'
+# ltx_models         = 'E:\AI-Data\LTX25'
+
+# Output namespaces are PINNED in code (studio.config.namespaces) and cannot be configured: ComfyUI writes
+# <comfyui_output_dir>\studio, LTX writes videos\studio and {latents,logs,previews}\studio-*, the studio
+# writes outputs\studio. Keys such as output_subdir, studio_category and name_prefix are rejected.
+
+[comfyui]
+host = "127.0.0.1"
+port = 8188
+request_timeout_s = 30.0
+
+[ltx]
+render_script = "render.py"
+
+[ffmpeg]
+ffmpeg = "ffmpeg"
+ffprobe = "ffprobe"

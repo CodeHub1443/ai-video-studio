@@ -1,0 +1,9 @@
+schema_version: 1
+id: ffmpeg
+display_name: FFmpeg / ffprobe
+kind: tool
+adapter: studio.engines.ffmpeg.FfmpegExecutor   # adapter arrives in a later milestone; name only
+operations: [transcode]
+probes:
+  - {kind: ffmpeg_encoder, value: libx264}
+notes: Media tool. Masters default to CPU encoders; NVENC is gpu class "media" and needs the lease.

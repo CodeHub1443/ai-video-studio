@@ -1,0 +1,17 @@
+schema_version: 1
+id: ffmpeg.cpu.transcode
+display_name: FFmpeg CPU transcode
+engine: ffmpeg
+operation: transcode
+models: []
+inputs:
+  - {role: clip, media_type: video, required: true}
+outputs:
+  - {role: video, media_type: video}
+determinism: bitwise        # UNVERIFIED for multithreaded encoders; confirm before relying on it
+execution_only: [threads]
+resources:
+  gpu: none                 # no GPU use by definition; vram is therefore not declared
+  # RAM and commit are hard gates for CPU workloads too: while unknown (null) this binding is NOT admissible.
+  ram_gb: {value: null, basis: unknown}
+  commit_gb: {value: null, basis: unknown}

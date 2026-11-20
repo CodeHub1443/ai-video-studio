@@ -1,0 +1,11 @@
+schema_version: 1
+id: ltx25_22b
+display_name: LTX-2.5 weights (streaming runtime)
+kind: video_pipeline
+family: ltx-2.5
+format: directory
+license: {id: unknown, commercial: unknown, notes: "Open decision D9: LTX-2 license vs commercial use."}
+files:
+  # The whole weights folder, located by the LTX runtime itself through its LTX_MODELS setting.
+  - {root: ltx_models, path: ".", role: weights_dir}
+notes: Metadata only; lives outside the workspace and is never moved or modified.
