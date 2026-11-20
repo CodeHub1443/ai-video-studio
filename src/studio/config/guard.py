@@ -157,7 +157,9 @@ def revalidate(
     """
     fresh = authorize(policy, auth.path, auth.op, probe=probe)
     if fresh.scope_name != auth.scope_name:
-        raise AccessDenied(f"{auth.path}: scope changed from {auth.scope_name!r} to {fresh.scope_name!r}")
+        raise AccessDenied(
+            f"{auth.path}: scope changed from {auth.scope_name!r} to {fresh.scope_name!r}"
+        )
     if same_path(fresh.anchor, auth.anchor) and fresh.anchor_identity != auth.anchor_identity:
         raise AccessDenied(f"{auth.path}: {auth.anchor} was replaced since authorization")
     return fresh

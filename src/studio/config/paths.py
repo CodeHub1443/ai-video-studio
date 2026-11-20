@@ -48,11 +48,15 @@ def validate_segment(segment: str) -> str:
             "(':' also rules out drive components and NTFS alternate data streams)"
         )
     if segment[-1] in ". ":
-        raise PathValidationError(f"segment {segment!r} ends with a dot or space (Windows strips it)")
+        raise PathValidationError(
+            f"segment {segment!r} ends with a dot or space (Windows strips it)"
+        )
     if segment.split(".", 1)[0].rstrip(" ").casefold() in _RESERVED_DEVICE_NAMES:
         raise PathValidationError(f"segment {segment!r} is a reserved Windows device name")
     if _SHORT_NAME.search(segment):
-        raise PathValidationError(f"segment {segment!r} looks like an 8.3 short name; use the long name")
+        raise PathValidationError(
+            f"segment {segment!r} looks like an 8.3 short name; use the long name"
+        )
     return segment
 
 

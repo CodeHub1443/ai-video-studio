@@ -59,7 +59,11 @@ class ObjectRef:
 
     def __post_init__(self) -> None:
         check_sha256(self.sha256, "object.sha256")
-        if isinstance(self.size_bytes, bool) or not isinstance(self.size_bytes, int) or self.size_bytes < 0:
+        if (
+            isinstance(self.size_bytes, bool)
+            or not isinstance(self.size_bytes, int)
+            or self.size_bytes < 0
+        ):
             fail("object.size", "object.size_bytes", "size must be a non-negative integer")
 
     @property
@@ -92,11 +96,15 @@ class MediaMetadata:
                 check_text(value, f"metadata.{name}")
         for name in ("width", "height", "frame_count", "audio_channels", "sample_rate_hz"):
             value = getattr(self, name)
-            if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 1):
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, int) or value < 1
+            ):
                 fail("metadata.range", f"metadata.{name}", "must be an integer >= 1")
         for name in ("duration_s", "fps"):
             value = getattr(self, name)
-            if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or not value > 0):
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, (int, float)) or not value > 0
+            ):
                 fail("metadata.range", f"metadata.{name}", "must be a number > 0")
         _set(self, "extra", freeze_params(self.extra, "metadata.extra"))
 
@@ -123,7 +131,9 @@ def check_metadata_for(
         for name in ("duration_s", "fps", "frame_count"):
             if getattr(metadata, name) is not None:
                 bad("metadata.irrelevant", f"{name} does not apply to {media_type}")
-    if media_type is MediaType.AUDIO and (metadata.fps is not None or metadata.frame_count is not None):
+    if media_type is MediaType.AUDIO and (
+        metadata.fps is not None or metadata.frame_count is not None
+    ):
         bad("metadata.irrelevant", "fps/frame_count do not apply to audio")
     if media_type in (MediaType.IMAGE, MediaType.MASK, MediaType.TEXT, MediaType.TIMELINE) and (
         metadata.audio_channels is not None or metadata.sample_rate_hz is not None
@@ -174,12 +184,27 @@ class Provenance:
                 if v is None
             ]
             if missing:
-                fail("provenance.incomplete", "provenance", f"{self.origin} needs {', '.join(missing)}")
+                fail(
+                    "provenance.incomplete",
+                    "provenance",
+                    f"{self.origin} needs {', '.join(missing)}",
+                )
         else:
-            if any(v is not None for v in (self.binding_id, self.job_id, self.attempt_id, self.spec_hash)):
-                fail("provenance.imported_producer", "provenance", "imported assets have no producing job")
+            if any(
+                v is not None
+                for v in (self.binding_id, self.job_id, self.attempt_id, self.spec_hash)
+            ):
+                fail(
+                    "provenance.imported_producer",
+                    "provenance",
+                    "imported assets have no producing job",
+                )
             if self.source_description is None:
-                fail("provenance.source_missing", "provenance", "imported assets need a source_description")
+                fail(
+                    "provenance.source_missing",
+                    "provenance",
+                    "imported assets need a source_description",
+                )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -200,7 +225,11 @@ class RightsInfo:
             value = getattr(self, name)
             if value is not None:
                 check_text(value, f"rights.{name}")
-        _set(self, "restrictions", tuple(check_text(r, "rights.restrictions") for r in self.restrictions))
+        _set(
+            self,
+            "restrictions",
+            tuple(check_text(r, "rights.restrictions") for r in self.restrictions),
+        )
         check_text(self.notes, "rights.notes", allow_empty=True)
 
     @property
@@ -245,7 +274,11 @@ class AssetVersion:
     def __post_init__(self) -> None:
         check_id(self.version_id, "version.version_id")
         check_id(self.asset_id, "version.asset_id")
-        if isinstance(self.version_number, bool) or not isinstance(self.version_number, int) or self.version_number < 1:
+        if (
+            isinstance(self.version_number, bool)
+            or not isinstance(self.version_number, int)
+            or self.version_number < 1
+        ):
             fail("version.number", "version.version_number", "must be an integer >= 1")
         _check_aware(self.created_at, "version.created_at")
 
@@ -272,7 +305,9 @@ class LineageEdge:
             check_id(self.role, "lineage.role", ROLE_RE)
 
 
-def validate_lineage(edges: tuple[LineageEdge, ...] | list[LineageEdge]) -> tuple[ValidationIssue, ...]:
+def validate_lineage(
+    edges: tuple[LineageEdge, ...] | list[LineageEdge],
+) -> tuple[ValidationIssue, ...]:
     """Duplicate and cycle checks over lineage edges alone (endpoint existence is a snapshot rule)."""
     issues: list[ValidationIssue] = []
     seen: set[LineageEdge] = set()
@@ -287,10 +322,14 @@ def validate_lineage(edges: tuple[LineageEdge, ...] | list[LineageEdge]) -> tupl
             )
         seen.add(edge)
     nodes = {e.parent_version_id for e in edges} | {e.child_version_id for e in edges}
-    _, remaining = topological_order(nodes, ((e.parent_version_id, e.child_version_id) for e in edges))
+    _, remaining = topological_order(
+        nodes, ((e.parent_version_id, e.child_version_id) for e in edges)
+    )
     if remaining:
         issues.append(
-            ValidationIssue("lineage.cycle", "lineage", f"cycle among versions: {', '.join(remaining)}")
+            ValidationIssue(
+                "lineage.cycle", "lineage", f"cycle among versions: {', '.join(remaining)}"
+            )
         )
     return tuple(issues)
 
@@ -316,7 +355,11 @@ class AssetRef:
         if self.sha256 is not None:
             check_sha256(self.sha256, "asset_ref.sha256")
             if self.version_id is None:
-                fail("asset_ref.unpinned_hash", "asset_ref", "a content hash requires a pinned version_id")
+                fail(
+                    "asset_ref.unpinned_hash",
+                    "asset_ref",
+                    "a content hash requires a pinned version_id",
+                )
 
     @property
     def is_resolved(self) -> bool:
@@ -325,6 +368,8 @@ class AssetRef:
     def canonical_form(self, *, resolved: bool) -> dict[str, Any]:
         if resolved:
             if not self.is_resolved:
-                raise UnresolvedSpecError(f"asset reference for role {self.role!r} is not pinned to content")
+                raise UnresolvedSpecError(
+                    f"asset reference for role {self.role!r} is not pinned to content"
+                )
             return {"role": self.role, "sha256": self.sha256}
         return {"role": self.role, "asset_id": self.asset_id, "version_id": self.version_id}

@@ -37,7 +37,9 @@ MAX_REGISTRY_ID_LEN = 96
 
 def check_id(value: object, path: str, pattern: re.Pattern[str] = ID_RE) -> str:
     if not isinstance(value, str) or not pattern.fullmatch(value):
-        fail("id.invalid", path, f"{value!r} is not a valid identifier (expected {pattern.pattern})")
+        fail(
+            "id.invalid", path, f"{value!r} is not a valid identifier (expected {pattern.pattern})"
+        )
     return value
 
 
@@ -57,7 +59,11 @@ def check_registry_id(value: object, path: str) -> str:
     check_id(value, path, REGISTRY_ID_RE)
     assert isinstance(value, str)
     if len(value) > MAX_REGISTRY_ID_LEN:
-        fail("registry_id.too_long", path, f"registry id longer than {MAX_REGISTRY_ID_LEN} characters")
+        fail(
+            "registry_id.too_long",
+            path,
+            f"registry id longer than {MAX_REGISTRY_ID_LEN} characters",
+        )
     return value
 
 

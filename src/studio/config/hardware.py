@@ -64,7 +64,9 @@ class HardwareProfile(_Strict):
     schema_version: SchemaVersion = SCHEMA_VERSION
     name: str
     description: str = ""
-    gpu_vram_total_gb: float = Field(gt=0, description="nominal device VRAM; NVML is authoritative later")
+    gpu_vram_total_gb: float = Field(
+        gt=0, description="nominal device VRAM; NVML is authoritative later"
+    )
     # Unknown (None) until stated by the owner or measured; never guessed. Used only for static
     # registry-to-hardware compatibility checks.
     system_ram_gb: float | None = Field(None, gt=0)
@@ -81,9 +83,13 @@ class HardwareProfile(_Strict):
         if self.thresholds.vram_margin_gb >= self.gpu_vram_total_gb:
             raise ValueError("vram_margin_gb must be smaller than gpu_vram_total_gb")
         if not self.provisional and self.calibration_ref is None:
-            raise ValueError("provisional=false requires calibration_ref (the recorded calibration run)")
+            raise ValueError(
+                "provisional=false requires calibration_ref (the recorded calibration run)"
+            )
         if self.provisional and self.calibration_ref is not None:
-            raise ValueError("calibration_ref is set but provisional is still true; they must agree")
+            raise ValueError(
+                "calibration_ref is set but provisional is still true; they must agree"
+            )
         return self
 
 

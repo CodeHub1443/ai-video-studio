@@ -127,16 +127,17 @@ _ALLOWED_OUTPUTS: dict[Operation, frozenset[MediaType]] = {
 }
 
 
-def _list_registry_files(
-    folder: Path, section: str, issues: list[RegistryIssue]
-) -> list[Path]:
+def _list_registry_files(folder: Path, section: str, issues: list[RegistryIssue]) -> list[Path]:
     files: list[Path] = []
     for entry in sorted(folder.iterdir(), key=lambda p: p.name.lower()):
         if entry.suffix.lower() not in YAML_SUFFIXES:
             if entry.is_file():
                 issues.append(
                     RegistryIssue(
-                        "warning", "ignored_file", f"{section}/{entry.name}", "not a .yaml/.yml file"
+                        "warning",
+                        "ignored_file",
+                        f"{section}/{entry.name}",
+                        "not a .yaml/.yml file",
                     )
                 )
             continue
@@ -155,7 +156,10 @@ def _list_registry_files(
         if entry.stat().st_size > MAX_REGISTRY_FILE_BYTES:
             issues.append(
                 RegistryIssue(
-                    "error", "file_too_large", f"{section}/{entry.name}", "exceeds registry file limit"
+                    "error",
+                    "file_too_large",
+                    f"{section}/{entry.name}",
+                    "exceeds registry file limit",
                 )
             )
             continue
@@ -177,7 +181,9 @@ def load_registry(root: Path) -> Registry:
         folder = root / section
         if is_reparse_point(folder):
             issues.append(
-                RegistryIssue("error", "link_rejected", section, f"folder is a symlink/junction: {folder}")
+                RegistryIssue(
+                    "error", "link_rejected", section, f"folder is a symlink/junction: {folder}"
+                )
             )
             continue
         if not folder.is_dir():
@@ -191,7 +197,9 @@ def load_registry(root: Path) -> Registry:
                 continue
             if not isinstance(data, dict):
                 issues.append(
-                    RegistryIssue("error", "not_a_mapping", str(file), "top level must be a mapping")
+                    RegistryIssue(
+                        "error", "not_a_mapping", str(file), "top level must be a mapping"
+                    )
                 )
                 continue
             try:
@@ -269,7 +277,11 @@ def validate_registry(reg: Registry) -> list[RegistryIssue]:
                     f"engine {engine.id!r} does not declare operation {b.operation.value!r}",
                 )
             if engine.kind is EngineKind.TOOL and b.resources.gpu is GpuClass.EXCLUSIVE:
-                err("gpu_class", b.id, "a media tool must use gpu 'none' or 'media', not 'exclusive'")
+                err(
+                    "gpu_class",
+                    b.id,
+                    "a media tool must use gpu 'none' or 'media', not 'exclusive'",
+                )
             if engine.kind is not EngineKind.TOOL and b.resources.gpu is GpuClass.MEDIA:
                 err("gpu_class", b.id, "gpu class 'media' is only valid for media tools")
         for m in b.models:
@@ -322,7 +334,9 @@ def validate_registry(reg: Registry) -> list[RegistryIssue]:
             err("no_required_output", b.id, "at least one output must be required")
         if b.features.mask and not any(s.media_type is MediaType.MASK for s in b.inputs):
             err("feature_mismatch", b.id, "features.mask is true but no mask input is declared")
-        if b.features.reference_images and not any(s.media_type is MediaType.IMAGE for s in b.inputs):
+        if b.features.reference_images and not any(
+            s.media_type is MediaType.IMAGE for s in b.inputs
+        ):
             err("feature_mismatch", b.id, "features.reference_images needs an image input")
         if b.features.native_audio and not any(s.media_type is MediaType.VIDEO for s in b.outputs):
             err("feature_mismatch", b.id, "features.native_audio needs a video output")

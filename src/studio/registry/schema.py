@@ -80,7 +80,9 @@ class EngineKind(StrEnum):
 class GpuClass(StrEnum):
     NONE = "none"
     EXCLUSIVE = "exclusive"
-    MEDIA = "media"  # NVENC/NVDEC/CUDA filters: real GPU work, needs the lease (architecture section 8)
+    MEDIA = (
+        "media"  # NVENC/NVDEC/CUDA filters: real GPU work, needs the lease (architecture section 8)
+    )
 
 
 class EstimateBasis(StrEnum):
@@ -186,7 +188,9 @@ class ModelSpec(_Strict):
     @model_validator(mode="after")
     def _dot_only_for_directories(self) -> ModelSpec:
         if self.format != "directory" and any(f.path == "." for f in self.files):
-            raise ValueError("path '.' (a whole root) is only valid for models with format 'directory'")
+            raise ValueError(
+                "path '.' (a whole root) is only valid for models with format 'directory'"
+            )
         return self
 
 
@@ -199,7 +203,9 @@ class Quantity(_Strict):
 
     value: float | None = Field(None, ge=0)
     basis: EstimateBasis = EstimateBasis.UNKNOWN
-    source: str = Field("", description="who/what produced the value; required whenever value is set")
+    source: str = Field(
+        "", description="who/what produced the value; required whenever value is set"
+    )
 
     @model_validator(mode="after")
     def _provenance(self) -> Quantity:
@@ -307,7 +313,9 @@ class TemplateRef(_Strict):
     to milestone M2.1; until then a template can only be declared as explicitly unresolved, so the
     registry never contains a path that looks real but points at nothing."""
 
-    status: Literal["unresolved"] = "unresolved"  # M2.1 adds "resolved" together with real resolution
+    status: Literal["unresolved"] = (
+        "unresolved"  # M2.1 adds "resolved" together with real resolution
+    )
     hint: str | None = Field(None, min_length=1, description="free-text intent, not a path")
 
 

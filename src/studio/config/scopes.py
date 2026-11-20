@@ -67,7 +67,9 @@ class AccessDenied(Exception):
 
 class MatchMode(StrEnum):
     SUBTREE = "subtree"  # the base folder and everything below it
-    NAME_PREFIX = "name_prefix"  # only entries directly below base whose name starts with ``prefix``
+    NAME_PREFIX = (
+        "name_prefix"  # only entries directly below base whose name starts with ``prefix``
+    )
 
 
 @dataclass(frozen=True)
@@ -141,7 +143,9 @@ class AccessPolicy:
             s = containing[0]
             owner = s.owner.value if s.owner else "nobody (read-only)"
             return AccessDecision(
-                False, None, f"{actor.value} may not {op.value} in scope {s.name!r} (owner: {owner})"
+                False,
+                None,
+                f"{actor.value} may not {op.value} in scope {s.name!r} (owner: {owner})",
             )
         return AccessDecision(False, None, "outside every declared scope (default deny)")
 
@@ -213,7 +217,9 @@ def build_access_policy(paths: PathsConfig) -> AccessPolicy:
     for scope in scopes:
         for rule in deny:
             if overlaps(scope.base, rule.base) and scope.union_ops() & rule.ops:
-                raise ValueError(f"scope {scope.name!r} could perform operations denied by {rule.name!r}")
+                raise ValueError(
+                    f"scope {scope.name!r} could perform operations denied by {rule.name!r}"
+                )
         if scope.owner in (C, L):
             engine_root = paths.comfyui_root if scope.owner is C else paths.ltx_repo
             if not is_within(scope.base, engine_root):

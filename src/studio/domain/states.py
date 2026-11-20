@@ -149,7 +149,9 @@ def check_table_integrity[S: StrEnum](
         if state in targets:
             issues.append(ValidationIssue("table.self_loop", table.name, f"{state} -> {state}"))
         for target in targets - states:
-            issues.append(ValidationIssue("table.unknown_target", table.name, f"{state} -> {target}"))
+            issues.append(
+                ValidationIssue("table.unknown_target", table.name, f"{state} -> {target}")
+            )
     reachable = {table.initial}
     frontier = [table.initial]
     while frontier:
@@ -158,7 +160,9 @@ def check_table_integrity[S: StrEnum](
                 reachable.add(nxt)
                 frontier.append(nxt)
     for state in states - reachable:
-        issues.append(ValidationIssue("table.unreachable", table.name, f"{state} unreachable from initial"))
+        issues.append(
+            ValidationIssue("table.unreachable", table.name, f"{state} unreachable from initial")
+        )
     if not table.terminal_states:
         issues.append(ValidationIssue("table.no_terminal", table.name, "no terminal state"))
     return tuple(issues)
@@ -208,7 +212,10 @@ TAKE_TRANSITIONS = _table(
         TakeState.PLANNED: (TakeState.GENERATING, TakeState.CANCELED),
         TakeState.GENERATING: (TakeState.PRODUCED, TakeState.FAILED, TakeState.CANCELED),
         TakeState.PRODUCED: (TakeState.APPROVED, TakeState.REJECTED),
-        TakeState.APPROVED: (TakeState.PRODUCED, TakeState.REJECTED),  # PRODUCED = approval went stale
+        TakeState.APPROVED: (
+            TakeState.PRODUCED,
+            TakeState.REJECTED,
+        ),  # PRODUCED = approval went stale
         TakeState.REJECTED: (),
         TakeState.FAILED: (),
         TakeState.CANCELED: (),

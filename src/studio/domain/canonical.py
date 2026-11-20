@@ -32,7 +32,9 @@ CANONICAL_VERSION = 1
 _INT_MIN = -(2**63)
 _INT_MAX = 2**64 - 1
 
-type ParamValue = str | int | float | bool | None | tuple[ParamValue, ...] | Mapping[str, ParamValue]
+type ParamValue = (
+    str | int | float | bool | None | tuple[ParamValue, ...] | Mapping[str, ParamValue]
+)
 type ParamMap = Mapping[str, ParamValue]
 
 
