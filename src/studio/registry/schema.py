@@ -159,7 +159,7 @@ class ModelFileRef(_Strict):
         description="relative, forward slashes; '.' means the whole root (directory models only)",
     )
     role: str = Field(min_length=1)
-    size_bytes: int | None = Field(None, ge=0)
+    size_bytes: int | None = Field(default=None, ge=0)
     sha256: Sha256 | None = None
 
     @field_validator("path")
@@ -201,10 +201,10 @@ class Quantity(_Strict):
     treated as admissible (``studio.registry.compat``).
     """
 
-    value: float | None = Field(None, ge=0)
+    value: float | None = Field(default=None, ge=0)
     basis: EstimateBasis = EstimateBasis.UNKNOWN
     source: str = Field(
-        "", description="who/what produced the value; required whenever value is set"
+        default="", description="who/what produced the value; required whenever value is set"
     )
 
     @model_validator(mode="after")
@@ -268,15 +268,15 @@ class IoSlot(_Strict):
 
 
 class Constraints(_Strict):
-    dim_multiple: int | None = Field(None, ge=1)
+    dim_multiple: int | None = Field(default=None, ge=1)
     frame_rule: FrameRule = FrameRule.ANY
-    min_width: int | None = Field(None, ge=1)
-    max_width: int | None = Field(None, ge=1)
-    min_height: int | None = Field(None, ge=1)
-    max_height: int | None = Field(None, ge=1)
-    max_frames: int | None = Field(None, ge=1)
+    min_width: int | None = Field(default=None, ge=1)
+    max_width: int | None = Field(default=None, ge=1)
+    min_height: int | None = Field(default=None, ge=1)
+    max_height: int | None = Field(default=None, ge=1)
+    max_frames: int | None = Field(default=None, ge=1)
     fps: tuple[float, ...] = ()
-    max_prompt_tokens: int | None = Field(None, ge=1)
+    max_prompt_tokens: int | None = Field(default=None, ge=1)
 
 
 class Features(_Strict):
@@ -316,7 +316,7 @@ class TemplateRef(_Strict):
     status: Literal["unresolved"] = (
         "unresolved"  # M2.1 adds "resolved" together with real resolution
     )
-    hint: str | None = Field(None, min_length=1, description="free-text intent, not a path")
+    hint: str | None = Field(default=None, min_length=1, description="free-text intent, not a path")
 
 
 class BindingSpec(_Strict):

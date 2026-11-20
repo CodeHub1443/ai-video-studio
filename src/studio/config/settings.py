@@ -281,10 +281,10 @@ class ComfyUIConfig(_Section):
     The output namespace is pinned (``studio.config.namespaces``), not configured here."""
 
     host: str = "127.0.0.1"
-    port: int = Field(DEFAULT_COMFYUI_PORT, ge=1, le=65535)
+    port: int = Field(default=DEFAULT_COMFYUI_PORT, ge=1, le=65535)
     allow_remote: bool = False
-    client_id_prefix: str = Field("studio", pattern=r"^[a-z0-9_-]+$")
-    request_timeout_s: float = Field(30.0, gt=0)
+    client_id_prefix: str = Field(default="studio", pattern=r"^[a-z0-9_-]+$")
+    request_timeout_s: float = Field(default=30.0, gt=0)
 
     @model_validator(mode="after")
     def _loopback_only(self) -> Self:

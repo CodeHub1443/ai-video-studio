@@ -11,7 +11,7 @@ who may approve what) are intentionally absent; see ADR-0010 for the open items.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -267,7 +267,7 @@ def _check_production(s: DomainSnapshot, issues: list[ValidationIssue]) -> None:
 
 
 def _check_take_source(
-    issues: list[ValidationIssue], where: str, take: Take, takes: dict[str, Take]
+    issues: list[ValidationIssue], where: str, take: Take, takes: Mapping[Any, Take]
 ) -> None:
     source = takes.get(take.source_take_id or "")
     if source is None:
@@ -305,8 +305,8 @@ def _check_asset_refs(
     issues: list[ValidationIssue],
     where: str,
     refs: Iterable[Any],
-    assets: dict[str, Asset],
-    versions: dict[str, AssetVersion],
+    assets: Mapping[Any, Asset],
+    versions: Mapping[Any, AssetVersion],
 ) -> None:
     for ref in refs:
         path = f"{where}.references[{ref.role}]"
