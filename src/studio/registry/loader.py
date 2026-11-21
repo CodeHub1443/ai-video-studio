@@ -13,7 +13,10 @@ from ruamel.yaml import YAML
 
 from studio.config.checks import is_reparse_point
 from studio.registry.schema import (
+    EXECUTION_ONLY_CREATIVE_ALLOWLIST,
+    RESERVED_CREATIVE_FIELDS,
     BindingSpec,
+    Determinism,
     EngineKind,
     EngineSpec,
     GpuClass,
@@ -45,6 +48,20 @@ class RegistryError(Exception):
         super().__init__("\n".join(str(i) for i in issues))
 
 
+@dataclass(frozen=True)
+class ResolvedRecovery:
+    """The recovery limits that apply to one binding, and where they came from.
+
+    ``source`` is ``"binding:<id>"``, ``"engine:<id>"`` or ``"none"`` (no automatic recovery). A limit of
+    ``None`` means none of that kind. A later milestone builds the domain's policy snapshot from this.
+    """
+
+    source: str
+    max_infrastructure_retries: int | None = None
+    max_resumes: int | None = None
+    max_resume_depth: int | None = None
+
+
 @dataclass(frozen=True, eq=False)  # identity equality/hash: the read-only mappings are not hashable
 class Registry:
     engines: Mapping[str, EngineSpec]
@@ -62,6 +79,24 @@ class Registry:
 
     def bindings_of_engine(self, engine_id: str) -> list[BindingSpec]:
         return [b for b in self.bindings.values() if b.engine == engine_id]
+
+    def resolve_recovery(self, binding_id: str) -> ResolvedRecovery:
+        """A binding's ``recovery`` block replaces the engine's as a whole (no field merging); with
+        neither block there is no automatic recovery. Unknown ids raise ``KeyError``."""
+        binding = self.bindings[binding_id]
+        engine = self.engines.get(binding.engine)
+        if binding.recovery is not None:
+            source, block = f"binding:{binding.id}", binding.recovery
+        elif engine is not None and engine.recovery is not None:
+            source, block = f"engine:{engine.id}", engine.recovery
+        else:
+            return ResolvedRecovery(source="none")
+        return ResolvedRecovery(
+            source=source,
+            max_infrastructure_retries=block.max_infrastructure_retries,
+            max_resumes=block.max_resumes,
+            max_resume_depth=block.max_resume_depth,
+        )
 
 
 _SECTIONS: tuple[tuple[str, type[BaseModel]], ...] = (
@@ -140,6 +175,15 @@ def _list_registry_files(folder: Path, section: str, issues: list[RegistryIssue]
                         "not a .yaml/.yml file",
                     )
                 )
+            else:
+                issues.append(
+                    RegistryIssue(
+                        "warning",
+                        "ignored_entry",
+                        f"{section}/{entry.name}",
+                        "not a regular file (registry folders are not searched recursively)",
+                    )
+                )
             continue
         if is_reparse_point(entry):
             issues.append(
@@ -152,6 +196,14 @@ def _list_registry_files(folder: Path, section: str, issues: list[RegistryIssue]
             )
             continue
         if not entry.is_file():
+            issues.append(
+                RegistryIssue(
+                    "warning",
+                    "ignored_entry",
+                    f"{section}/{entry.name}",
+                    "has a YAML name but is not a regular file",
+                )
+            )
             continue
         if entry.stat().st_size > MAX_REGISTRY_FILE_BYTES:
             issues.append(
@@ -296,7 +348,7 @@ def validate_registry(reg: Registry) -> list[RegistryIssue]:
                 warn(
                     f"{label}_unknown",
                     b.id,
-                    f"{label} requirement is unknown; the binding is NOT admissible until it is measured",
+                    f"{label} requirement is unknown; the binding is NOT statically compatible until it is measured",
                 )
         roles = [s.role for s in b.inputs]
         if len(roles) != len(set(roles)):
@@ -342,6 +394,33 @@ def validate_registry(reg: Registry) -> list[RegistryIssue]:
             err("feature_mismatch", b.id, "features.native_audio needs a video output")
         if len(set(b.execution_only)) != len(b.execution_only):
             err("duplicate_key", b.id, "execution_only keys must be unique")
+        managed = [name.casefold() for name in b.managed_environment]  # Windows names: case-blind
+        if len(set(managed)) != len(managed):
+            err("duplicate_key", b.id, "managed_environment names must be unique")
+        shared = sorted({key.casefold() for key in b.execution_only} & set(managed))
+        if shared:
+            err(
+                "managed_environment_conflict",
+                b.id,
+                f"{shared} appear in both execution_only and managed_environment; a managed "
+                "environment variable is set by the executor and is never a task parameter",
+            )
+        for key in b.execution_only:
+            if key in RESERVED_CREATIVE_FIELDS and key not in EXECUTION_ONLY_CREATIVE_ALLOWLIST:
+                err(
+                    "execution_only_reserved",
+                    b.id,
+                    f"execution_only may not name the creative field {key!r}; only "
+                    f"{sorted(EXECUTION_ONLY_CREATIVE_ALLOWLIST)} may be adapted",
+                )
+        if b.determinism is Determinism.BITWISE and b.execution_only:
+            warn(
+                "determinism_execution_only",
+                b.id,
+                "determinism 'bitwise' is combined with execution-only parameters, which may change "
+                "the output bits (for example thread counts); this cannot be verified without "
+                "execution, so declare 'perceptual' unless proven",
+            )
         c = b.constraints
         for lo, hi, label in (
             (c.min_width, c.max_width, "width"),

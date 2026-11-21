@@ -20,6 +20,7 @@ set ``env``. Output namespaces are pinned in ``studio.config.namespaces`` and ar
 from __future__ import annotations
 
 import os
+import tomllib
 from collections.abc import Mapping
 from enum import StrEnum
 from functools import lru_cache
@@ -48,6 +49,9 @@ from studio.config.paths import (
 DEFAULT_WORKSPACE_ROOT = Path(r"E:\AI_VIDEO_STUDIO")
 DEFAULT_LTX_REPO = Path(r"E:\Dev\ltx25-igpu-streaming")
 DEFAULT_LTX_MODELS = Path(r"E:\AI-Data\LTX25")
+PINNED_AI_DATA_ROOT = Path(
+    r"E:\AI-Data"
+)  # every model store lives below it; test sandboxes never may
 DEFAULT_COMFYUI_PORT = 8188  # the real, user-run ComfyUI; env=test must never be pointed at it
 
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
@@ -327,8 +331,77 @@ class FfmpegConfig(_Section):
     ffprobe: str = "ffprobe"
 
 
+class BreakerConfig(_Section):
+    """Crash-loop breaker thresholds (UD-7): ``k`` counted interrupts within ``window_s`` seconds.
+
+    PROVISIONAL and NOT CALIBRATED (decision I-8). The numbers live ONLY in ``config/studio.toml``
+    (``[recovery.breaker]``); there are deliberately no code defaults. While a value is ``None`` the
+    consumer must fail closed (treat it as K = 1: any counted interrupt pauses the queue). ``provisional``
+    stays true until a calibration run exists.
+
+    Ruling R-8: the values may be set only in the base ``studio.toml`` (or by constructor kwargs).
+    A ``STUDIO_RECOVERY*`` environment variable or a ``recovery`` table in an overlay file is a settings
+    error (see ``StudioSettings.settings_customise_sources``). Values are strict integers: no float or
+    string coercion, and booleans are rejected.
+    """
+
+    k: int | None = Field(default=None, strict=True, ge=1)
+    window_s: int | None = Field(default=None, strict=True, gt=0)
+    provisional: bool = True
+
+    @field_validator("k", "window_s", mode="before")
+    @classmethod
+    def _not_a_bool(cls, v: object) -> object:
+        if isinstance(v, bool):
+            raise ValueError("must be an integer, not a boolean")
+        return v
+
+
+class RecoveryConfig(_Section):
+    """Recovery settings that belong in configuration, never in the domain (design C.6)."""
+
+    breaker: BreakerConfig = Field(default_factory=BreakerConfig)
+
+
+_BREAKER_RULE = "recovery.breaker may be set only in the base studio.toml (ruling R-8)"
+
+
+def _refuse_breaker_in_environment() -> None:
+    """R-8: any ``STUDIO_RECOVERY`` / ``STUDIO_RECOVERY__*`` variable is an error. Names only, no values."""
+    names = sorted(
+        name
+        for name in os.environ
+        if name.upper() == "STUDIO_RECOVERY" or name.upper().startswith("STUDIO_RECOVERY__")
+    )
+    if names:
+        raise ValueError(
+            f"{_BREAKER_RULE}, not by environment variables; remove: {', '.join(names)}"
+        )
+
+
+def _refuse_breaker_in_overlay(overlay: Path) -> None:
+    """R-8: a ``recovery`` table in the environment overlay file is an error (a missing file is fine)."""
+    try:
+        text = overlay.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return
+    if "recovery" in tomllib.loads(text):
+        raise ValueError(f"{_BREAKER_RULE}, not in the overlay file {overlay.name}")
+
+
 class _OverlayToml(TomlConfigSettingsSource):
-    """TOML source that refuses ``env`` so a file can never contradict the selected environment."""
+    """TOML source that refuses ``env`` so a file can never contradict the selected environment, and
+    refuses a ``recovery`` table in the overlay (R-8)."""
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        toml_file: list[Path],
+        *,
+        overlay: Path | None = None,
+    ) -> None:
+        self._overlay = overlay
+        super().__init__(settings_cls, toml_file=toml_file)
 
     def __call__(self) -> dict[str, Any]:
         data = super().__call__()
@@ -336,6 +409,8 @@ class _OverlayToml(TomlConfigSettingsSource):
             raise ValueError(
                 "'env' cannot be set in a TOML file; use STUDIO_ENV or the env= argument"
             )
+        if self._overlay is not None:
+            _refuse_breaker_in_overlay(self._overlay)
         return data
 
 
@@ -369,6 +444,7 @@ class StudioSettings(BaseSettings):
     comfyui: ComfyUIConfig = Field(default_factory=ComfyUIConfig)
     ltx: LtxConfig = Field(default_factory=LtxConfig)
     ffmpeg: FfmpegConfig = Field(default_factory=FfmpegConfig)
+    recovery: RecoveryConfig = Field(default_factory=RecoveryConfig)
 
     @field_validator("env", mode="before")
     @classmethod
@@ -419,8 +495,9 @@ class StudioSettings(BaseSettings):
         except ConfigDirNotFound:
             cfg = None  # installed package without STUDIO_CONFIG_DIR: built-in defaults only
         files = [] if cfg is None else [cfg / "studio.toml", cfg / f"studio.{env_name}.toml"]
+        _refuse_breaker_in_environment()
         toml = _OverlayToml(
-            settings_cls, toml_file=files
+            settings_cls, toml_file=files, overlay=files[1] if files else None
         )  # later file wins; missing files are skipped
         return (init_settings, env_settings, toml)
 
@@ -456,6 +533,92 @@ class StudioSettings(BaseSettings):
         return build_access_policy(self.paths)
 
 
+def _checkout_base_file() -> Path | None:
+    """``<software>/config/studio.toml`` of the source checkout, located WITHOUT ``STUDIO_CONFIG_DIR``.
+
+    ``None`` for an installed package (no ``pyproject.toml`` next to the source tree). The file itself may
+    be missing; the caller decides what that means.
+    """
+    software = Path(__file__).resolve().parents[3]
+    if (software / "pyproject.toml").is_file():
+        return software / "config" / "studio.toml"
+    return None
+
+
+def _read_base_roots(base: Path) -> tuple[dict[str, Path], str | None]:
+    """The ``[paths]`` locations of one base file, plus a problem text if the file is unusable.
+
+    A file that does not exist contributes nothing (the built-in defaults are protected anyway). A file
+    that exists but cannot be read, parsed or validated fails closed.
+    """
+    try:
+        text = base.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}, None
+    except (OSError, ValueError) as exc:
+        return {}, f"cannot read the base configuration {base} to protect its real roots: {exc}"
+    try:
+        table = tomllib.loads(text).get("paths", {})
+        if not isinstance(table, dict):
+            raise ValueError("'paths' must be a table")
+        paths = PathsConfig.model_validate(table)
+    except ValueError as exc:  # TOMLDecodeError and pydantic ValidationError are ValueErrors
+        return {}, f"invalid base configuration {base}; cannot protect its real roots: {exc}"
+    return dict(paths.all_paths), None
+
+
+def _base_config_roots() -> tuple[dict[str, Path], str | None]:
+    """Every path of the BASE configuration, labelled by origin, plus a problem text if one is unusable.
+
+    Two base files can define real locations, and BOTH are protected: the source checkout's
+    ``config/studio.toml`` (found independently of any variable, label ``checkout-configured``) and the
+    ``studio.toml`` of the directory ``config_dir()`` selects when ``STUDIO_CONFIG_DIR`` points elsewhere
+    (label ``base-configured``). So pointing the variable at another directory can add protection but can
+    never remove the checkout's. No overlay, no ``STUDIO_*`` path variable and no init kwarg can influence
+    this: a test must not be able to shrink the set of real locations it is protected from. A file that
+    exists but cannot be read, parsed or validated fails closed.
+    """
+    files: list[tuple[str, Path]] = []
+    problems: list[str] = []
+    checkout = _checkout_base_file()
+    if checkout is not None:
+        files.append(("checkout-configured", checkout))
+    try:
+        selected: Path | None = config_dir()
+    except ConfigDirNotFound:
+        selected = None
+    except Exception as exc:  # noqa: BLE001 - fail closed on any configuration-directory problem
+        selected = None
+        problems.append(f"cannot locate the base configuration to protect its real roots: {exc}")
+    if selected is not None:
+        base = selected / "studio.toml"
+        if checkout is None or not same_path(base, checkout):
+            files.append(("base-configured", base))
+    roots: dict[str, Path] = {}
+    for label, file in files:
+        found, problem = _read_base_roots(file)
+        if problem is not None:
+            problems.append(problem)
+        for name, path in found.items():
+            roots[f"{label} paths.{name}"] = path
+    return roots, ("; ".join(problems) if problems else None)
+
+
+def _protected_real_roots() -> tuple[dict[str, Path], str | None]:
+    """Locations an env=test sandbox may never overlap: the built-in real locations, the pinned
+    AI-Data root (drive E) and every path of the base configuration files. The second item is a
+    fail-closed problem text."""
+    protected: dict[str, Path] = {
+        "real workspace": DEFAULT_WORKSPACE_ROOT,
+        "protected LTX repository": DEFAULT_LTX_REPO,
+        "real LTX weights": DEFAULT_LTX_MODELS,
+        "pinned AI-Data root": PINNED_AI_DATA_ROOT,
+    }
+    base, problem = _base_config_roots()
+    protected.update(base)
+    return protected, problem
+
+
 def _test_isolation_problems(s: StudioSettings) -> list[str]:
     """env=test: every location must be inside the explicit sandbox allowlist.
 
@@ -470,11 +633,9 @@ def _test_isolation_problems(s: StudioSettings) -> list[str]:
         problems.append(
             f"test_sandbox_root must be at least two levels below the drive root: {sandbox}"
         )
-    protected = {
-        "real workspace": DEFAULT_WORKSPACE_ROOT,
-        "protected LTX repository": DEFAULT_LTX_REPO,
-        "real LTX weights": DEFAULT_LTX_MODELS,
-    }
+    protected, protect_problem = _protected_real_roots()
+    if protect_problem is not None:
+        problems.append(protect_problem)
     for label, real in protected.items():
         if overlaps(sandbox, real):
             problems.append(f"test_sandbox_root overlaps the {label}")

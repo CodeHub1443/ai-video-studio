@@ -2,18 +2,21 @@ from studio.registry.compat import (
     BindingVerdict,
     admission_profile,
     check_hardware_compatibility,
+    check_static_compatibility,
     evaluate_registry,
-    is_admissible,
 )
 from studio.registry.files import check_model_files, resolve_model_file
 from studio.registry.loader import (
     Registry,
     RegistryError,
     RegistryIssue,
+    ResolvedRecovery,
     load_registry,
     validate_registry,
 )
 from studio.registry.schema import (
+    EXECUTION_ONLY_CREATIVE_ALLOWLIST,
+    RESERVED_CREATIVE_FIELDS,
     BindingSpec,
     EngineKind,
     EngineSpec,
@@ -22,10 +25,13 @@ from studio.registry.schema import (
     ModelSpec,
     Operation,
     Quantity,
+    RecoveryPolicy,
     ResourceProfile,
 )
 
 __all__ = [
+    "EXECUTION_ONLY_CREATIVE_ALLOWLIST",
+    "RESERVED_CREATIVE_FIELDS",
     "BindingSpec",
     "BindingVerdict",
     "EngineKind",
@@ -35,15 +41,17 @@ __all__ = [
     "ModelSpec",
     "Operation",
     "Quantity",
+    "RecoveryPolicy",
     "Registry",
     "RegistryError",
     "RegistryIssue",
+    "ResolvedRecovery",
     "ResourceProfile",
     "admission_profile",
     "check_hardware_compatibility",
     "check_model_files",
+    "check_static_compatibility",
     "evaluate_registry",
-    "is_admissible",
     "load_registry",
     "resolve_model_file",
     "validate_registry",

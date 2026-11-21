@@ -28,17 +28,29 @@ class ConfigIssue:
     message: str
 
 
+def probe_reparse_point(path: Path) -> bool | None:
+    """Tri-state link check: True for a symlink/junction/reparse point, False for a regular entry or a
+    path that does not exist (``FileNotFoundError``, ``NotADirectoryError``), and ``None`` (unknown)
+    when ``lstat`` fails for any other reason. Guard callers must treat ``None`` as a denial.
+    """
+    try:
+        st = os.lstat(path)
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+    except (OSError, ValueError):
+        return None
+    attrs = getattr(st, "st_file_attributes", 0)
+    return stat.S_ISLNK(st.st_mode) or bool(attrs & _FILE_ATTRIBUTE_REPARSE_POINT)
+
+
 def is_reparse_point(path: Path) -> bool:
     """True for symlinks, junctions and other reparse points (OneDrive placeholders, mount points).
 
     Uses ``lstat`` so the link itself is examined, not its target. A missing path is not a link.
+    FAIL-OPEN for non-guard callers: an unknown result (``probe_reparse_point`` is ``None``) is reported
+    as False here, exactly as before. Code that must fail closed uses ``probe_reparse_point``.
     """
-    try:
-        st = os.lstat(path)
-    except OSError:
-        return False
-    attrs = getattr(st, "st_file_attributes", 0)
-    return stat.S_ISLNK(st.st_mode) or bool(attrs & _FILE_ATTRIBUTE_REPARSE_POINT)
+    return bool(probe_reparse_point(path))
 
 
 def find_reparse_points(path: Path) -> list[Path]:

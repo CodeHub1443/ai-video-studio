@@ -1,8 +1,11 @@
-"""Static registry-to-hardware admission check (pure given the profile file; no NVML, no devices).
+"""Static registry-to-hardware compatibility check (pure given the profile file; no NVML, no devices).
+
+This is NOT runtime admission (ADR-0007): that decision uses live NVML/RAM readings and belongs to the
+resource manager. Here "statically compatible" only means "could ever fit, from declared numbers".
 
 Approved rules:
 
-* **Unknown never passes.** A binding is admissible only if EVERY hard-gate requirement it declares is
+* **Unknown never passes.** A binding is statically compatible only if EVERY hard-gate requirement it declares is
   known: VRAM (GPU classes ``exclusive``/``media``; a ``none`` binding declares no VRAM need), RAM and
   commit headroom (all bindings, CPU and GPU alike). Any unknown requirement blocks it.
 * **The profile is not injectable.** The hardware profile is loaded here, from the profile name selected
@@ -30,7 +33,7 @@ from studio.registry.schema import BindingSpec, EngineKind, GpuClass
 class BindingVerdict:
     binding_id: str
     profile_name: str
-    admissible: bool
+    statically_compatible: bool
     required_vram_gb: (
         float | None
     )  # new_context_term and margin included; None when not applicable/unknown
@@ -85,7 +88,7 @@ def _evaluate(
     return BindingVerdict(
         binding_id=binding.id,
         profile_name=profile.name,
-        admissible=not blocking,
+        statically_compatible=not blocking,
         required_vram_gb=required,
         codes=tuple(blocking),
     )
@@ -100,8 +103,10 @@ def evaluate_registry(registry: Registry, settings: StudioSettings) -> dict[str,
     return out
 
 
-def is_admissible(registry: Registry, binding_id: str, settings: StudioSettings) -> BindingVerdict:
-    """Verdict for one binding. Unknown binding ids raise ``KeyError`` (never 'admissible')."""
+def check_static_compatibility(
+    registry: Registry, binding_id: str, settings: StudioSettings
+) -> BindingVerdict:
+    """Verdict for one binding. Unknown binding ids raise ``KeyError`` (never 'statically compatible')."""
     binding = registry.bindings[binding_id]
     engine = registry.engines.get(binding.engine)
     return _evaluate(binding, engine.kind if engine else None, admission_profile(settings))
@@ -110,7 +115,7 @@ def is_admissible(registry: Registry, binding_id: str, settings: StudioSettings)
 def check_hardware_compatibility(
     registry: Registry, settings: StudioSettings
 ) -> list[RegistryIssue]:
-    """One issue per blocking reason of every non-admissible binding, plus a warning while the profile's
+    """One issue per blocking reason of every binding that is not statically compatible, plus a warning while the profile's
     thresholds are provisional. All blocking reasons are ``error``: nothing unknown is let through."""
     profile = admission_profile(settings)
     issues: list[RegistryIssue] = []
@@ -127,6 +132,8 @@ def check_hardware_compatibility(
         for code in v.codes:
             severity: Severity = "error"
             issues.append(
-                RegistryIssue(severity, code, v.binding_id, f"not admissible on {v.profile_name!r}")
+                RegistryIssue(
+                    severity, code, v.binding_id, f"not statically compatible on {v.profile_name!r}"
+                )
             )
     return issues
