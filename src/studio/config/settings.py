@@ -488,20 +488,24 @@ class StudioSettings(BaseSettings):
         return build_access_policy(self.paths)
 
 
-def _base_config_roots() -> tuple[dict[str, Path], str | None]:
-    """Every path of the BASE configuration (``studio.toml`` alone), plus a problem text if it is unusable.
+def _checkout_base_file() -> Path | None:
+    """``<software>/config/studio.toml`` of the source checkout, located WITHOUT ``STUDIO_CONFIG_DIR``.
 
-    No overlay, no ``STUDIO_*`` variable and no init kwarg can influence this: a test must not be able to
-    shrink the set of real locations it is protected from. No config directory or no ``studio.toml`` means
-    the built-in defaults apply (already protected). A file that exists but cannot be read, parsed or
-    validated fails closed.
+    ``None`` for an installed package (no ``pyproject.toml`` next to the source tree). The file itself may
+    be missing; the caller decides what that means.
     """
-    try:
-        base = config_dir() / "studio.toml"
-    except ConfigDirNotFound:
-        return {}, None
-    except Exception as exc:  # noqa: BLE001 - fail closed on any configuration-directory problem
-        return {}, f"cannot locate the base configuration to protect its real roots: {exc}"
+    software = Path(__file__).resolve().parents[3]
+    if (software / "pyproject.toml").is_file():
+        return software / "config" / "studio.toml"
+    return None
+
+
+def _read_base_roots(base: Path) -> tuple[dict[str, Path], str | None]:
+    """The ``[paths]`` locations of one base file, plus a problem text if the file is unusable.
+
+    A file that does not exist contributes nothing (the built-in defaults are protected anyway). A file
+    that exists but cannot be read, parsed or validated fails closed.
+    """
     try:
         text = base.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -518,10 +522,47 @@ def _base_config_roots() -> tuple[dict[str, Path], str | None]:
     return dict(paths.all_paths), None
 
 
+def _base_config_roots() -> tuple[dict[str, Path], str | None]:
+    """Every path of the BASE configuration, labelled by origin, plus a problem text if one is unusable.
+
+    Two base files can define real locations, and BOTH are protected: the source checkout's
+    ``config/studio.toml`` (found independently of any variable, label ``checkout-configured``) and the
+    ``studio.toml`` of the directory ``config_dir()`` selects when ``STUDIO_CONFIG_DIR`` points elsewhere
+    (label ``base-configured``). So pointing the variable at another directory can add protection but can
+    never remove the checkout's. No overlay, no ``STUDIO_*`` path variable and no init kwarg can influence
+    this: a test must not be able to shrink the set of real locations it is protected from. A file that
+    exists but cannot be read, parsed or validated fails closed.
+    """
+    files: list[tuple[str, Path]] = []
+    problems: list[str] = []
+    checkout = _checkout_base_file()
+    if checkout is not None:
+        files.append(("checkout-configured", checkout))
+    try:
+        selected: Path | None = config_dir()
+    except ConfigDirNotFound:
+        selected = None
+    except Exception as exc:  # noqa: BLE001 - fail closed on any configuration-directory problem
+        selected = None
+        problems.append(f"cannot locate the base configuration to protect its real roots: {exc}")
+    if selected is not None:
+        base = selected / "studio.toml"
+        if checkout is None or not same_path(base, checkout):
+            files.append(("base-configured", base))
+    roots: dict[str, Path] = {}
+    for label, file in files:
+        found, problem = _read_base_roots(file)
+        if problem is not None:
+            problems.append(problem)
+        for name, path in found.items():
+            roots[f"{label} paths.{name}"] = path
+    return roots, ("; ".join(problems) if problems else None)
+
+
 def _protected_real_roots() -> tuple[dict[str, Path], str | None]:
     """Locations an env=test sandbox may never overlap: the built-in real locations, the pinned
-    AI-Data root (drive E) and every path of the base configuration. The second item is a fail-closed
-    problem text."""
+    AI-Data root (drive E) and every path of the base configuration files. The second item is a
+    fail-closed problem text."""
     protected: dict[str, Path] = {
         "real workspace": DEFAULT_WORKSPACE_ROOT,
         "protected LTX repository": DEFAULT_LTX_REPO,
@@ -529,8 +570,7 @@ def _protected_real_roots() -> tuple[dict[str, Path], str | None]:
         "pinned AI-Data root": PINNED_AI_DATA_ROOT,
     }
     base, problem = _base_config_roots()
-    for name, path in base.items():
-        protected[f"base-configured paths.{name}"] = path
+    protected.update(base)
     return protected, problem
 
 

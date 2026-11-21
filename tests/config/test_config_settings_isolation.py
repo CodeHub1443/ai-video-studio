@@ -80,6 +80,7 @@ def test_without_a_config_directory_the_defaults_are_protected_and_a_sandbox_is_
 ):
     monkeypatch.delenv("STUDIO_CONFIG_DIR", raising=False)
     monkeypatch.setattr(settings_module, "_source_checkout_config_dir", lambda: None)
+    monkeypatch.setattr(settings_module, "_checkout_base_file", lambda: None)
     assert make(**test_kwargs(sandbox)).env.value == "test"
 
 
@@ -306,3 +307,161 @@ def test_unknown_top_level_and_section_keys_are_rejected(cfg: Path):
     write(cfg / "studio.toml", "[comfyui]\nsurprise = 1\n")
     with pytest.raises(ValidationError):
         make(env="dev")
+
+
+# --- D-1: the checkout's configured roots are protected whatever STUDIO_CONFIG_DIR says ---------------
+
+REAL_CONFIG = Path(__file__).resolve().parents[2] / "config"
+
+
+@pytest.fixture
+def checkout_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A stand-in for the source checkout's config/studio.toml that configures D:\\Real\\WS."""
+    f = write(tmp_path / "checkout" / "studio.toml", "[paths]\nworkspace_root = 'D:\\Real\\WS'\n")
+    monkeypatch.setattr(settings_module, "_checkout_base_file", lambda: f)
+    return f
+
+
+def test_d1_an_empty_config_dir_override_no_longer_unprotects_the_checkout_roots(
+    cfg: Path, checkout_file: Path
+):
+    """B-12 probe B: STUDIO_CONFIG_DIR points at an empty directory, the checkout configures D:\\Real\\WS."""
+    assert not (cfg / "studio.toml").exists()
+    with pytest.raises(
+        ValidationError, match="overlaps the checkout-configured paths.workspace_root"
+    ):
+        make(**test_kwargs(Path(r"D:\Real\WS\sandbox")))
+
+
+def test_d1_both_the_checkout_file_and_the_override_file_are_protected(
+    cfg: Path, checkout_file: Path
+):
+    write(cfg / "studio.toml", "[paths]\nltx_repo = 'D:\\Other\\LTX'\n")
+    with pytest.raises(
+        ValidationError, match="overlaps the checkout-configured paths.workspace_root"
+    ):
+        make(**test_kwargs(Path(r"D:\Real\WS\sandbox")))
+    with pytest.raises(ValidationError, match="overlaps the base-configured paths.ltx_repo"):
+        make(**test_kwargs(Path(r"D:\Other\LTX\sandbox")))
+
+
+def test_d1_the_same_file_is_not_read_twice_or_relabelled(
+    cfg: Path, monkeypatch: pytest.MonkeyPatch
+):
+    same = write(cfg / "studio.toml", "[paths]\nworkspace_root = 'D:\\Real\\WS'\n")
+    monkeypatch.setattr(settings_module, "_checkout_base_file", lambda: same)
+    protected, problem = settings_module._protected_real_roots()  # pyright: ignore[reportPrivateUsage]
+    assert problem is None
+    assert "checkout-configured paths.workspace_root" in protected
+    assert not [k for k in protected if k.startswith("base-configured")]
+
+
+def test_d1_a_sandbox_elsewhere_is_still_accepted(cfg: Path, checkout_file: Path, sandbox: Path):
+    assert make(**test_kwargs(sandbox)).env.value == "test"
+
+
+def test_d1_the_real_checkout_file_is_located_without_the_override(cfg: Path):
+    located = settings_module._checkout_base_file()  # pyright: ignore[reportPrivateUsage]
+    assert located == REAL_CONFIG / "studio.toml"
+    protected, problem = settings_module._protected_real_roots()  # pyright: ignore[reportPrivateUsage]
+    assert problem is None
+    assert protected["checkout-configured paths.workspace_root"] == Path(r"E:\AI_VIDEO_STUDIO")
+
+
+def test_d1_a_tree_without_pyproject_is_not_a_checkout(
+    cfg: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    fake_module = tmp_path / "site" / "a" / "b" / "settings.py"
+    fake_module.parent.mkdir(parents=True)
+    monkeypatch.setattr(settings_module, "__file__", str(fake_module))
+    assert settings_module._checkout_base_file() is None  # pyright: ignore[reportPrivateUsage]
+
+
+def test_d1_a_missing_checkout_file_contributes_nothing(
+    cfg: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    monkeypatch.setattr(
+        settings_module, "_checkout_base_file", lambda: tmp_path / "nowhere" / "studio.toml"
+    )
+    protected, problem = settings_module._protected_real_roots()  # pyright: ignore[reportPrivateUsage]
+    assert problem is None
+    assert set(protected) == {
+        "real workspace",
+        "protected LTX repository",
+        "real LTX weights",
+        "pinned AI-Data root",
+    }
+
+
+# --- fail closed: SET-1's own path, reached directly -------------------------------------------------
+
+BAD_BASE_FILES = {
+    "bad-toml": "this is = not [toml",
+    "unknown-key": "[paths]\nunknown_key = 'D:\\x'\n",
+    "relative-path": "[paths]\nworkspace_root = 'relative\\path'\n",
+    "paths-not-a-table": "paths = 3\n",
+}
+
+
+def _valid_test_settings(sandbox: Path) -> StudioSettings:
+    return make(**test_kwargs(sandbox))
+
+
+@pytest.mark.parametrize("content", list(BAD_BASE_FILES.values()), ids=list(BAD_BASE_FILES))
+def test_set1_reports_a_problem_for_each_kind_of_broken_override_file(
+    cfg: Path, sandbox: Path, content: str
+):
+    s = _valid_test_settings(sandbox)  # built while the file is still valid
+    write(cfg / "studio.toml", content)
+    problems = settings_module._test_isolation_problems(s)  # pyright: ignore[reportPrivateUsage]
+    assert any("invalid base configuration" in p and "studio.toml" in p for p in problems), problems
+
+
+@pytest.mark.parametrize("content", list(BAD_BASE_FILES.values()), ids=list(BAD_BASE_FILES))
+def test_set1_reports_a_problem_for_each_kind_of_broken_checkout_file(
+    cfg: Path, sandbox: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, content: str
+):
+    s = _valid_test_settings(sandbox)
+    broken = write(tmp_path / "checkout" / "studio.toml", content)
+    monkeypatch.setattr(settings_module, "_checkout_base_file", lambda: broken)
+    problems = settings_module._test_isolation_problems(s)  # pyright: ignore[reportPrivateUsage]
+    assert any("invalid base configuration" in p and "checkout" in p for p in problems), problems
+
+
+@pytest.mark.parametrize("which", ["override", "checkout"])
+def test_set1_reports_a_problem_for_an_unreadable_base_file(
+    cfg: Path, sandbox: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, which: str
+):
+    s = _valid_test_settings(sandbox)
+    if which == "override":
+        (cfg / "studio.toml").mkdir()  # a directory where the file should be
+    else:
+        unreadable = tmp_path / "checkout" / "studio.toml"
+        unreadable.mkdir(parents=True)
+        monkeypatch.setattr(settings_module, "_checkout_base_file", lambda: unreadable)
+    problems = settings_module._test_isolation_problems(s)  # pyright: ignore[reportPrivateUsage]
+    assert any("cannot read the base configuration" in p for p in problems), problems
+
+
+def test_set1_reports_a_problem_when_the_config_dir_override_is_not_usable(
+    sandbox: Path, monkeypatch: pytest.MonkeyPatch, cfg: Path
+):
+    s = _valid_test_settings(sandbox)
+    monkeypatch.setenv("STUDIO_CONFIG_DIR", "relative\\dir")
+    problems = settings_module._test_isolation_problems(s)  # pyright: ignore[reportPrivateUsage]
+    assert any("cannot locate the base configuration" in p for p in problems), problems
+
+
+def test_set1_a_problem_in_either_file_is_reported_together(
+    cfg: Path, sandbox: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    s = _valid_test_settings(sandbox)
+    broken = write(tmp_path / "checkout" / "studio.toml", "paths = 3\n")
+    monkeypatch.setattr(settings_module, "_checkout_base_file", lambda: broken)
+    write(cfg / "studio.toml", "[paths]\nunknown_key = 'D:\\x'\n")
+    (problem,) = [
+        p
+        for p in settings_module._test_isolation_problems(s)  # pyright: ignore[reportPrivateUsage]
+        if "invalid base configuration" in p
+    ]
+    assert str(broken) in problem and str(cfg / "studio.toml") in problem
