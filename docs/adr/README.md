@@ -9,9 +9,10 @@
 | [0005](0005-separate-torch-free-environment.md) | Separate torch-free Python environment | Accepted |
 | [0006](0006-asset-ingestion-conditional-hardlinks.md) | Asset ingestion with conditional hardlinks | Accepted |
 | [0007](0007-gpu-admission-device-level.md) | GPU admission measured at device level | Accepted (corrects Rev. 2 s6.3) |
-| [0008](0008-configuration-and-registry-design.md) | Configuration and registry design | **Proposed: awaiting approval** |
-| [0009](0009-proposed-amendments-to-accepted-adrs.md) | Proposed amendments to ADR-0003, 0006 and 0007 | **Proposed: awaiting approval** |
+| [0008](0008-configuration-and-registry-design.md) | Configuration and registry design | Partially accepted (2026-11-20): D-1..D-8 and A-1..A-6 accepted; P-1..P-14 and open items proposed |
+| [0009](0009-proposed-amendments-to-accepted-adrs.md) | Proposed amendments to ADR-0003, 0004, 0006 and 0007 | **Proposed: awaiting approval** |
 | [0010](0010-domain-model-and-state-definitions.md) | Domain model and state definitions | **Proposed: awaiting approval** |
+| [0011](0011-slots-fingerprints-recovery.md) | Slots, fingerprints, approval invalidation and recovery policy | **Proposed: awaiting approval** |
 
 Format: Context, Decision, Consequences. Accepted ADRs are immutable: changes to them are made only by a
 superseding ADR or a proposed amendment (such as 0009) that is explicitly marked as awaiting approval until
