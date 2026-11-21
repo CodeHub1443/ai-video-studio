@@ -35,14 +35,19 @@ and of the pydantic-based configuration, without implementing persistence, sched
   mapping from class to permitted recovery, plus `AttemptEndCause` (ENGINE, STUDIO_PROCESS, HOST_RESTART,
   USER_STOP): an interrupted attempt carries a cause. Under UD-7 (amended): USER_STOP consumes no budget and
   does NOT count toward the crash-loop breaker; STUDIO_PROCESS and HOST_RESTART count toward the breaker
-  without consuming budget; engine-side failures consume budget. Planner rulings under UD-7 (PROPOSED with
-  this ADR; see ADR-0011): R-1 the breaker counts an interrupt by its interruption time (`finished_at` set at
+  without consuming budget; engine-side failures consume budget. Planner rulings under UD-7 (R-1..R-5 and
+  R-8..R-11; PROPOSED with this ADR; see ADR-0011): R-1 the breaker counts an interrupt by its interruption time (`finished_at` set at
   marking), not `started_at`; R-2 after USER_STOP there is never an automatic follow-up, only a human
   MANUAL_RESTART; R-3 an attempt interrupted before it started is not recovery: re-dispatch consumes no budget,
   needs no policy limit and never counts toward the breaker; R-4 breaker K and T have no code defaults, values
-  live only in `config/studio.toml` (3 / 1800, provisional), absent configuration fails closed (K = 1); R-5 a
+  live only in `config/studio.toml` (3 / 1800, provisional), absent values fail closed independently (K = 1; no T = unbounded window); R-5 a
   limit of None means that kind is never automatic, a limit of 0 means no budget-consuming follow-ups while
-  non-budget follow-ups remain allowed.
+  non-budget follow-ups remain allowed; R-8 K and T may be set only in the base
+  `studio.toml`, an environment overlay or `STUDIO_*` value is a settings error, constructor kwargs are allowed,
+  values are strict integers, no code defaults; R-9 `max_resume_depth`, when set, must be >= 1, None means
+  depth 1; R-10 breaker events carry an explicit, unique, strictly increasing sequence number; R-11 R-2 takes
+  precedence over R-3, a re-dispatch after a never-started attempt is an AUTOMATIC INFRASTRUCTURE_RETRY-origin
+  attempt, and attempt states that imply the engine ran require `started_at`.
 - P-5 **WITHDRAWN.** The shared retry budget of 2 was rejected by UD-4. Replaced by the recovery section of
   ADR-0011 (separate limits, no domain default).
 - P-6 *(revised)* `studio.domain.vocab` is the single source of `Operation`, `MediaType` and `CommercialUse`;
@@ -57,16 +62,16 @@ and of the pydantic-based configuration, without implementing persistence, sched
   and `seed` (all required); the `Job` carries the task and a required recovery policy snapshot.
 
 ## C. Open items (not decided)
-- U-1 Which pre-authorization policies exist. Direction (I-2): a minimal catalogue, one execution-adaptation
-  policy class per binding naming allowed execution keys; CONTENT_REVIEW human-only for all takes for now.
-  Remains open until accepted.
+- U-1 Which pre-authorization policies exist. Direction chosen by the user (I-2); the catalogue's content
+  becomes binding only with acceptance of ADR-0010/0011. A minimal catalogue: one execution-adaptation policy
+  class per binding naming allowed execution keys; CONTENT_REVIEW human-only for all takes for now.
 - U-2 **Resolved** by UD-5 and UD-6 (an adapted result is a new take; adaptation may change only declared
   execution-only keys, with width, height and duration declarable through an allowlist and never fps: I-1b).
 - U-3 **Resolved** by UD-7 (separate limits; interrupted attempts consume no budget unless the cause is ENGINE).
 - U-4 **Resolved** by UD-2 and ADR-0011 (SHA-256; envelope and canonical v2).
-- U-5 What `unknown` or `no` commercial use / rights blocks (D7-D9). Direction (I-3): block export (not
+- U-5 What `unknown` or `no` commercial use / rights blocks (D7-D9). Direction chosen by the user (I-3): block export (not
   generation) of commercial deliverables when commercial use is "no" or "unknown", and warn in drafts. Not
-  implemented and not decided.
+  implemented; not an accepted rule.
 - U-6 **Resolved** by UD-1 and ADR-0011. Deliverable slots and frame extraction come with the timeline
   milestone (I-11).
 - U-7 Quarantine/staging may exist only on disk; whether those asset states are ever persisted is a

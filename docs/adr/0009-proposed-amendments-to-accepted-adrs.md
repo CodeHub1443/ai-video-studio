@@ -90,8 +90,11 @@ merges, and this note records why.
 - If not approved, the code's actor rules and ADR-0006's text conflict and a later milestone must resolve it
   before implementing ingestion.
 
+## User decisions recorded here (not ADR acceptance)
+- D6 (hardlink choice) is decided for M0.x by I-4: copy-always. Hardlinks after M0.x remain open and are
+  revisited with measured disk pressure.
+
 ## Not decided here
-- D6 (hardlink choice) is decided for M0.x only: copy-always (I-4). It is revisited with measured disk pressure.
 - D11 (protected perfume files) remains open.
 - D7-D9 (delivery, audio, licenses) remain open. The direction chosen in I-3 is to block *export* (not
   generation) of commercial deliverables when commercial use is "no" or "unknown", and to warn in drafts. It is

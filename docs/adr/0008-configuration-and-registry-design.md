@@ -75,13 +75,14 @@ These P-n belong to the ADR-0008 series, not to ADR-0010.
 - P-13 `.` as a model path only for `format: directory`. Recommendation: accept.
 - P-14 The `Authorization` object and `revalidate` as the shape of the mandatory gate (D-4 fixes the
   requirement, not this API). Recommendation: accept, with hardening against forged or copied
-  authorizations and fail-closed handling of unknown file identity.
+  authorizations, fail-closed handling of unknown file identity, and per-child authorization instead of
+  recursive delete (design E.2, G-5).
 
 ## C. Open items (not decided; nothing here is presented as fact)
 - U-1 `prod` behaviour: needs its own design and approval (disabled until then).
-- U-2 D6 (hardlink vs copy-always) is open, and ADR-0006's "move" and hardlink read-only-attribute steps
-  conflict with D-3 (see ADR-0009). Direction: copy-always through M0.x by user decision (I-4); the ADR-0006
-  amendment itself is PROPOSED in ADR-0009.
+- U-2 D6 is decided for M0.x by I-4 (copy-always); hardlinks after M0.x remain open. ADR-0006's "move" and
+  hardlink read-only-attribute steps conflict with D-3; the ADR-0006 amendment is PROPOSED in
+  [ADR-0009](0009-proposed-amendments-to-accepted-adrs.md).
 - U-3 Source gap: the original review text and the original "six decisions" list were not available to the
   implementer; group A was reconstructed from the briefs.
 - U-4 The pinned ComfyUI/LTX namespaces restate ADR-0002/0003 and are unverified against what the engines

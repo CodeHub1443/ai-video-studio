@@ -2,11 +2,11 @@
 
 **Status: PROPOSED, awaiting approval.** Nothing in this ADR is accepted. It records the M0.3a domain design
 (docs/design/m0.3a-domain-amendments.md, sections A-D, the frozen design record), amended by user decisions
-UD-7 (amended) and UD-12 (I-1 to I-13). Nothing here has been implemented, executed or tested; the
-implementation is in progress on separate branches and this text cites symbols and design sections, not
-code lines. It amends no accepted ADR by itself; the proposed amendments to accepted ADRs are in
+UD-7 (amended) and UD-12 (I-1..I-8, I-10..I-13; I-9 superseded by UD-7 amended). Nothing here is merged to
+main. Implementation is in progress on feat/b08-domain-m03a-p1 and feat/b09-config-registry-m03a; this ADR
+records no test results. It cites symbols and design sections, not code lines. It amends no accepted ADR by itself; the proposed amendments to accepted ADRs are in
 [ADR-0009](0009-proposed-amendments-to-accepted-adrs.md). Labels: UD-n are user decisions, I-n are the
-user's resolutions of the design's open questions (UD-12), R-n are planner rulings. ADR-0008 (D-n, P-n, U-n)
+user's resolutions of the design's open questions (UD-12), R-n are planner rulings (R-1..R-5 and R-8..R-12). ADR-0008 (D-n, P-n, U-n)
 and ADR-0010 (P-n, U-n) are separate series and are always named.
 
 ## Context
@@ -61,10 +61,13 @@ route from an admission refusal to adaptation, and approvals that went stale on 
   of the task fingerprint. `fps` is never adaptable.
 - Task fingerprint payload: identity digest, execution parameters, models (id, role, SHA-256, size; directory
   models by manifest digest), template digest, engine id and version. Managed environment values are excluded.
-  A fingerprint with an unknown component is `complete = false`: it is stored but never used for caching,
+  A fingerprint with an unknown component is `complete = false` (a template that is absent, as opposed to
+  unrecorded, counts as known): it is stored but never used for caching,
   deduplication or resume compatibility.
-- Canonical form v2 (`CANONICAL_VERSION = 2`): RFC 8785 (JCS) over a restricted value domain. JSON numbers are
-  limited to +-(2^53-1) and larger values are typed fields encoded as decimal strings; ASCII keys only; `fps`
+- Canonical form v2 (`CANONICAL_VERSION = 2`): RFC 8785 (JCS) over a restricted value domain. Integers are limited
+  to +-(2^53-1); only the seed is encoded as a decimal string, and every other integer stays within
+  +-(2^53-1). Floats follow RFC 8785 number formatting; the range applies to integers (R-12, planner ruling,
+  PROPOSED). ASCII keys only; `fps`
   is a rational and `duration_s` is normalized to an exact integer millisecond value; first-class collections are
   canonicalized before serialization. References gain an `index` and `(role, index)` is unique.
 - `spec_hash` is replaced by `identity_hash` plus `task_fingerprint`. Reproduction needs the same
@@ -101,6 +104,7 @@ route from an admission refusal to adaptation, and approvals that went stale on 
   (I-8: per-binding limits unset).
 - A Job stores a required `RecoveryPolicySnapshot` (source, the three limits, digest) at creation. A later
   registry change never alters a running job's budget. The domain never contains a literal default such as 2.
+- R-9 (planner ruling under UD-7, PROPOSED) `max_resume_depth`, when set, must be >= 1; None means a depth of 1.
 
 **Attempt causes.** An interrupted or failed attempt carries a cause: ENGINE, STUDIO_PROCESS, HOST_RESTART or
 USER_STOP (FAILED implies ENGINE). Initiator is AUTOMATIC or HUMAN; a human re-run has origin MANUAL_RESTART
@@ -109,19 +113,30 @@ and is never budgeted. Counters are always derived from persisted attempt rows, 
 **Budget and breaker (UD-7 amended).**
 | Cause | Consumes budget | Counts toward the breaker | Automatic follow-up |
 |---|---|---|---|
-| ENGINE (failed) | yes | no | per policy limit |
+| ENGINE (failed, or interrupted after start) | yes | no | per policy limit |
 | STUDIO_PROCESS (interrupted) | no | yes | per policy (non-budget) |
 | HOST_RESTART (interrupted) | no | yes | per policy (non-budget) |
 | USER_STOP (interrupted) | no | no | never (R-2) |
 
-**Planner rulings under UD-7 (R-1 to R-5; PROPOSED with this ADR, not user decisions).**
+ENGINE requires a started attempt.
+
+**Planner rulings under UD-7 (R-1 to R-5 and R-8 to R-12; PROPOSED with this ADR, not user decisions).**
 - R-1 The breaker counts an interrupt by its interruption time (`finished_at`, set when the interruption is
   marked), not by `started_at`.
 - R-2 After USER_STOP there is never an automatic follow-up; only a human MANUAL_RESTART.
 - R-3 An attempt interrupted before it started is not recovery: re-dispatch consumes no budget, needs no policy
   limit and never counts toward the breaker.
+- R-11 (planner ruling under UD-7, PROPOSED) R-2 takes precedence over R-3. A re-dispatch after a never-started
+  attempt is an AUTOMATIC attempt with origin INFRASTRUCTURE_RETRY. Attempt states that imply the engine ran
+  require `started_at`.
 - R-4 Breaker K and T have no code defaults. Their values live only in `config/studio.toml` (K = 3 interrupts
-  within T = 1800 s, provisional: I-8). If the configuration is absent, the breaker fails closed (K = 1).
+  within T = 1800 s, provisional: I-8). If the configuration is absent, the breaker fails closed. K and T fail
+  closed independently: an absent K is K = 1, and an absent T means an unbounded window (every counted
+  interrupt since the last reset). R-8 makes the wording "only in `config/studio.toml`" precise.
+- R-8 (planner ruling under UD-7, PROPOSED; supersedes R-4's wording and keeps its substance) K and T may be
+  set only in the base `studio.toml` (the file `config_dir()` selects). A value from an environment overlay
+  file or a `STUDIO_*` environment variable is a settings error. Constructor keyword arguments remain
+  allowed. Values are strict integers. There are no code defaults.
 - R-5 A limit of None means that recovery kind is never automatic. A limit of 0 means no budget-consuming
   follow-ups, while non-budget follow-ups (after STUDIO_PROCESS or HOST_RESTART) remain allowed.
 
@@ -131,12 +146,15 @@ must be complete), it is available, and the chain of consecutive resumes is with
 
 **Breaker mechanics.** Append-only events (tripped, reset, quarantine lifted) in the global database. The
 domain is clock-free (`now` is passed in). On trip the queue is paused and the registry binding of the attempt
-that reached K is quarantined. Reset and quarantine lift are human actions; nothing resets automatically.
+that reached K is quarantined. Reset and quarantine lift are human actions; nothing resets automatically. R-10 (planner ruling under UD-7,
+PROPOSED): events are ordered by an explicit sequence number (unique and strictly increasing, with `at`
+non-decreasing), never by time alone.
 
 **Startup marking.** A pure function selects attempts still in PENDING, RUNNING or INGESTING and marks them
 INTERRUPTED with cause HOST_RESTART (started before the host boot) or STUDIO_PROCESS, recording the boot id.
 INTERRUPTED is terminal, so a second run in the same boot finds nothing: marking is idempotent and applied in
-one transaction.
+one transaction. R-12 (planner ruling, PROPOSED): idempotency requires atomic persistence of one boot's
+transitions (persistence milestone).
 
 **Admission refusal route.** A job-level failure record (error class, refusal reason, detail) replaces a
 synthetic attempt. A permanent refusal fails the job with error class RESOURCE. EXCEEDS_CAPACITY on a job with
@@ -146,7 +164,8 @@ the route is calibration (the direction chosen in I-6; its amendment of ADR-0008
 a human re-plans it as a new job with `source_job_id`.
 
 **Provisional values.** K, T, every recovery limit and every other threshold in this ADR are provisional until
-calibrated. They live in configuration or registry data, never in the domain.
+calibrated. They live in configuration or registry data, never in the domain. The AST tripwire tests (no default budget,
+domain imports) are tripwires, not proofs (R-12, planner ruling, PROPOSED).
 
 ## Consequences
 - `spec_hash` is renamed and the canonical version becomes 2; no persisted data exists, so no migration.
@@ -160,5 +179,5 @@ calibrated. They live in configuration or registry data, never in the domain.
 ## Open items
 - The DELIVERABLE slot owner and a frame-extraction operation (I-11, timeline milestone).
 - Calibration of K, T and any per-binding limit (I-8).
-- Whether the planner rulings R-1 to R-5 are confirmed as user decisions.
+- Whether the planner rulings R-1 to R-5 and R-8 to R-12 are confirmed as user decisions.
 - The converter from registry policy to the domain snapshot belongs to the scheduler milestone.
