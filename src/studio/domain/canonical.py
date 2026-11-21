@@ -11,7 +11,11 @@ every value this module admits, so an independent tool can reproduce it:
 * Numbers follow the JCS number model: one numeric value has one text. ``24`` and ``24.0`` both serialize as
   ``24``. Floats are written like ECMAScript ``Number.prototype.toString`` (``format_number``).
 * Integers must lie within +-(2**53 - 1), the range a double represents exactly. Larger values (seeds,
-  sizes) are typed fields that their owners encode as decimal strings.
+  sizes) are typed fields that their owners encode as decimal strings. The range applies to integers only:
+  floats follow RFC 8785 as they are. There is no byte collision between the two, because an integer beyond
+  the range is rejected, and an integral float prints as the same text as the equal integer (one value, one
+  text). Integer text comes from the true value (``int.__repr__``), so an ``int`` subclass can never change the
+  bytes.
 * ``-0.0`` serializes as ``0``; ``NaN`` and infinities are rejected.
 * Keys are ASCII only, so code-point order equals the UTF-16 order JCS prescribes.
 * Strings are used as given (no Unicode normalization): text is content, and silently rewriting it would
@@ -63,7 +67,7 @@ def freeze_value(value: Any, path: str = "$") -> Any:
     if isinstance(value, int):
         if not -SAFE_INT_MAX <= value <= SAFE_INT_MAX:
             fail("canonical.int_range", path, "integer outside +-(2**53 - 1)")
-        return value
+        return int.__index__(value)  # a plain int, even for an int subclass
     if isinstance(value, float):
         if not math.isfinite(value):
             fail("canonical.non_finite", path, "NaN and infinity are not representable")
@@ -146,7 +150,7 @@ def _emit(value: Any, out: list[str]) -> None:
     elif value is False:
         out.append("false")
     elif isinstance(value, int):
-        out.append(str(value))
+        out.append(int.__repr__(value))  # never the subclass's own __str__/__repr__
     elif isinstance(value, float):
         out.append(format_number(value))
     elif isinstance(value, str):

@@ -188,6 +188,41 @@ def test_mapping_permutation_does_not_change_bytes(d: dict[str, int], rnd: Any) 
     assert canonical_bytes(dict(items)) == canonical_bytes(d)
 
 
+class _LyingInt(int):
+    """An int subclass whose text and repr are not its value (B-11 C4)."""
+
+    def __str__(self) -> str:
+        return "007"
+
+    def __repr__(self) -> str:
+        return "int-is-a-lie"
+
+
+def test_int_subclass_cannot_change_the_bytes() -> None:
+    plain = {"a": 7, "b": [7, {"c": -7}]}
+    lying = {"a": _LyingInt(7), "b": [_LyingInt(7), {"c": _LyingInt(-7)}]}
+    assert canonical_bytes(lying) == canonical_bytes(plain) == b'{"a":7,"b":[7,{"c":-7}]}'
+    frozen = freeze_value(_LyingInt(7))
+    assert type(frozen) is int and frozen == 7
+
+
+def test_int_subclass_is_still_range_checked() -> None:
+    with pytest.raises(DomainValidationError) as err:
+        canonical_bytes({"a": _LyingInt(SAFE_INT_MAX + 1)})
+    assert _code(err) == "canonical.int_range"
+    assert canonical_json(_LyingInt(SAFE_INT_MAX)) == str(SAFE_INT_MAX)
+
+
+def test_integral_float_and_equal_integer_share_one_text_and_out_of_range_ints_are_rejected() -> (
+    None
+):
+    """R-12: floats follow RFC 8785, integers are limited to +-(2**53 - 1); there is no way to write two
+    encodings of one value because an integer beyond the range cannot be written at all."""
+    assert canonical_json(2.0**53) == canonical_json(2**53 - 1 + 1.0) == "9007199254740992"
+    with pytest.raises(DomainValidationError):
+        canonical_json(2**53)
+
+
 @given(st.floats(allow_nan=False, allow_infinity=False))
 def test_float_value_text_is_stable_under_freezing(x: float) -> None:
     assert canonical_json({"x": x}) == '{"x":' + format_number(x) + "}"

@@ -49,11 +49,15 @@ from studio.domain.recovery import TakeOrigin
 from studio.domain.states import ProjectState, ShotState, TakeState
 from studio.domain.vocab import Operation
 
-# First-class creative fields; they may not be repeated as free-form parameter keys.
+# First-class creative fields; they may not be repeated as free-form parameter keys, on the creative side or
+# on the execution side ("capability" is the identity payload's name for "binding_id"). The reserved fields of
+# the I-1(b) allowlist reach the execution payload only through ``execution_only_reserved``, never through
+# ``ExecutionSpec.parameters``.
 RESERVED_CREATIVE_KEYS: frozenset[str] = frozenset(
     {
         "operation",
         "binding_id",
+        "capability",
         "prompt",
         "negative_prompt",
         "width",
@@ -342,6 +346,14 @@ class ExecutionSpec:
 
     def __post_init__(self) -> None:
         _set(self, "parameters", freeze_params(self.parameters, "execution.parameters"))
+        clash = RESERVED_CREATIVE_KEYS & set(self.parameters)
+        if clash:
+            fail(
+                "spec.execution_reserved",
+                "execution.parameters",
+                f"keys {sorted(clash)} are creative fields: a reserved field may leave the identity "
+                "only through the binding's execution_only list, never as an execution parameter",
+            )
 
     def canonical_form(self) -> dict[str, Any]:
         """For storage and diagnostics only; the task fingerprint uses ``TaskSpec.execution_payload``."""
@@ -369,6 +381,14 @@ def check_parameter_partition(
     issues: list[ValidationIssue] = []
     creative_keys = set(creative.parameters)
     execution_keys = set(execution.parameters)
+    for key in sorted(execution_keys & RESERVED_CREATIVE_KEYS):
+        issues.append(
+            ValidationIssue(
+                "spec.execution_reserved",
+                f"{path}.execution.{key}",
+                "a reserved creative field is not an execution parameter",
+            )
+        )
     for key in sorted(creative_keys & execution_keys):
         issues.append(
             ValidationIssue(
@@ -383,7 +403,7 @@ def check_parameter_partition(
                 "declared execution-only by the binding",
             )
         )
-    for key in sorted(execution_keys - declared):
+    for key in sorted(execution_keys - declared - RESERVED_CREATIVE_KEYS):
         issues.append(
             ValidationIssue(
                 "params.undeclared_execution",

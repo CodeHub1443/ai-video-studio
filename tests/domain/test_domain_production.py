@@ -20,6 +20,7 @@ from studio.domain.ids import (
     VersionId,
 )
 from studio.domain.production import (
+    RESERVED_CREATIVE_KEYS,
     CreativeSpec,
     ExecutionSpec,
     Project,
@@ -27,6 +28,7 @@ from studio.domain.production import (
     Scene,
     Shot,
     Take,
+    check_parameter_partition,
     duration_ms_from_seconds,
     reserved_execution_only_keys,
 )
@@ -415,6 +417,44 @@ def test_execution_payload_carries_moved_reserved_fields() -> None:
     assert _task_fp(task, execution_only_reserved=moved) != _task_fp(
         adapted, execution_only_reserved=moved
     )
+
+
+@pytest.mark.parametrize("key", sorted(RESERVED_CREATIVE_KEYS))
+def test_execution_parameters_reject_every_reserved_creative_key(key: str) -> None:
+    """B-11 D1: a reserved creative field is never an execution parameter (a second channel outside the identity)."""
+    with pytest.raises(DomainValidationError) as err:
+        ExecutionSpec(parameters={key: 1})
+    assert _code(err) == "spec.execution_reserved"
+    # The same name is rejected on the creative side too: a reserved field is first-class only.
+    with pytest.raises(DomainValidationError) as err2:
+        creative(parameters={key: 1})
+    assert _code(err2) == "spec.reserved_key"
+
+
+def test_reserved_key_set_covers_the_identity_payload_names() -> None:
+    payload = creative().identity_payload()
+    assert set(payload) - {"parameters"} <= RESERVED_CREATIVE_KEYS
+    assert {"capability", "duration_ms", "duration_s", "fps", "seed"} <= RESERVED_CREATIVE_KEYS
+
+
+@pytest.mark.parametrize("key", sorted(RESERVED_CREATIVE_KEYS))
+def test_partition_reports_a_reserved_key_among_execution_parameters(key: str) -> None:
+    """A spec built around the constructor (frozen object bypassed) is still caught by the partition check."""
+    execution = ExecutionSpec(parameters={"offload": True})
+    object.__setattr__(execution, "parameters", {"offload": True, key: 1})
+    issues = check_parameter_partition(creative(), execution, {"offload", "width"})
+    assert [i.code for i in issues] == ["spec.execution_reserved"]
+    assert issues[0].path == f"task.execution.{key}"
+
+
+def test_partition_accepts_declared_reserved_fields_in_the_binding_list() -> None:
+    """Declaring ``width`` execution-only moves the field through ``execution_only_reserved``: it is neither
+    an execution parameter nor an undeclared key."""
+    execution = ExecutionSpec(parameters={"tile": 1})
+    assert check_parameter_partition(creative(), execution, {"tile", "width"}) == ()
+    task = TaskSpec(creative=creative(width=512), execution=execution)
+    assert task.execution_payload(execution_only_reserved={"width"})["reserved"] == {"width": 512}
+    assert "width" not in task.execution_payload(execution_only_reserved={"width"})["parameters"]
 
 
 def test_authored_form_is_tagged_and_keeps_database_ids() -> None:
