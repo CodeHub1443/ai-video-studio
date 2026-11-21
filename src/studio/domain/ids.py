@@ -19,6 +19,7 @@ JobId = NewType("JobId", str)
 AttemptId = NewType("AttemptId", str)
 GateId = NewType("GateId", str)
 ApprovalId = NewType("ApprovalId", str)
+BreakerEventId = NewType("BreakerEventId", str)
 
 # Entity ids: ASCII, start alphanumeric, no separators that could be mistaken for paths.
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")

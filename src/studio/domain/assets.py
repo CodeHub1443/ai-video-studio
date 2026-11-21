@@ -7,7 +7,8 @@ Concept map (docs/architecture.md section 6, ADR-0006):
 * ``LineageEdge``   append-only parent/child relation between versions.
 * ``AssetRef``      how production and workflow specs point at assets (optionally pinned to a version).
 
-Not here: Slot/SlotBinding (a later milestone), object-store layout, ingestion, hashing, file access.
+Not here: Slot/SlotBinding (a later milestone), object-store layout, ingestion, file access. Digests of
+specs live in studio.domain.fingerprint.
 Where an object lives on disk is a persistence concern and is deliberately not derivable from this module.
 """
 
@@ -20,6 +21,7 @@ from typing import Any
 
 from studio.domain.canonical import ParamMap, freeze_params
 from studio.domain.errors import UnresolvedSpecError, ValidationIssue, fail
+from studio.domain.fingerprint import Fingerprint, FingerprintKind
 from studio.domain.graph import topological_order
 from studio.domain.ids import (
     ROLE_RE,
@@ -157,7 +159,10 @@ class Provenance:
     binding_id: str | None = None  # registry binding id of the capability that produced it
     job_id: JobId | None = None
     attempt_id: AttemptId | None = None
-    spec_hash: str | None = None  # the producing task's spec_hash, if known
+    identity_hash: Fingerprint | None = None  # the producing task's creative identity, if known
+    task_fingerprint: Fingerprint | None = None  # the producing task's fingerprint, if known
+    stage: str | None = None  # an intermediate artifact: the stage that produced it
+    stage_key: Fingerprint | None = None  # stage_key(task_fingerprint, stage), for resume checks
     source_description: str | None = None  # required for IMPORTED: where the bytes came from
     original_name: str | None = None  # file name at the source, informational only
 
@@ -166,8 +171,18 @@ class Provenance:
             check_registry_id(self.binding_id, "provenance.binding_id")
         check_optional_id(self.job_id, "provenance.job_id")
         check_optional_id(self.attempt_id, "provenance.attempt_id")
-        if self.spec_hash is not None:
-            check_sha256(self.spec_hash, "provenance.spec_hash")
+        for name, kind in (
+            ("identity_hash", FingerprintKind.CREATIVE_IDENTITY),
+            ("task_fingerprint", FingerprintKind.TASK_FINGERPRINT),
+            ("stage_key", FingerprintKind.STAGE_KEY),
+        ):
+            value = getattr(self, name)
+            if value is not None and (not isinstance(value, Fingerprint) or value.kind is not kind):
+                fail(f"provenance.{name}", f"provenance.{name}", f"expected a {kind} fingerprint")
+        if (self.stage is None) != (self.stage_key is None):
+            fail("provenance.stage", "provenance.stage", "stage and stage_key go together")
+        if self.stage is not None:
+            check_id(self.stage, "provenance.stage", ROLE_RE)
         if self.source_description is not None:
             check_text(self.source_description, "provenance.source_description")
         if self.original_name is not None:
@@ -192,7 +207,15 @@ class Provenance:
         else:
             if any(
                 v is not None
-                for v in (self.binding_id, self.job_id, self.attempt_id, self.spec_hash)
+                for v in (
+                    self.binding_id,
+                    self.job_id,
+                    self.attempt_id,
+                    self.identity_hash,
+                    self.task_fingerprint,
+                    self.stage,
+                    self.stage_key,
+                )
             ):
                 fail(
                     "provenance.imported_producer",
@@ -341,17 +364,23 @@ class AssetRef:
     * *authored*: ``asset_id`` only (latest-version intent) or ``asset_id`` + ``version_id``;
     * *resolved*: ``version_id`` and ``sha256`` both set. Only resolved refs may enter a fingerprint,
       because content, not a database id, is what makes two tasks equal.
+
+    ``(role, index)`` identifies the reference inside a spec: ``index`` (1-based) orders the several values of
+    one role, so authoring order never changes the identity.
     """
 
     role: str
     asset_id: AssetId
     version_id: VersionId | None = None
     sha256: str | None = None
+    index: int = 1
 
     def __post_init__(self) -> None:
         check_id(self.role, "asset_ref.role", ROLE_RE)
         check_id(self.asset_id, "asset_ref.asset_id")
         check_optional_id(self.version_id, "asset_ref.version_id")
+        if isinstance(self.index, bool) or not isinstance(self.index, int) or self.index < 1:
+            fail("asset_ref.index", "asset_ref.index", "must be an integer >= 1")
         if self.sha256 is not None:
             check_sha256(self.sha256, "asset_ref.sha256")
             if self.version_id is None:
@@ -365,11 +394,19 @@ class AssetRef:
     def is_resolved(self) -> bool:
         return self.version_id is not None and self.sha256 is not None
 
-    def canonical_form(self, *, resolved: bool) -> dict[str, Any]:
-        if resolved:
-            if not self.is_resolved:
-                raise UnresolvedSpecError(
-                    f"asset reference for role {self.role!r} is not pinned to content"
-                )
-            return {"role": self.role, "sha256": self.sha256}
-        return {"role": self.role, "asset_id": self.asset_id, "version_id": self.version_id}
+    def identity_form(self) -> dict[str, Any]:
+        """The creative-identity form: role, index and content hash only (never a database id)."""
+        if not self.is_resolved:
+            raise UnresolvedSpecError(
+                f"asset reference for role {self.role!r} is not pinned to content"
+            )
+        return {"role": self.role, "index": self.index, "sha256": self.sha256}
+
+    def authored_form(self) -> dict[str, Any]:
+        """Authored intent (for plan diffs); not fingerprinted."""
+        return {
+            "role": self.role,
+            "index": self.index,
+            "asset_id": self.asset_id,
+            "version_id": self.version_id,
+        }

@@ -7,12 +7,21 @@ DAG nodes that hold no GPU lease (architecture section 2).
 
 from __future__ import annotations
 
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
 from studio.domain.errors import ValidationIssue, fail
+from studio.domain.fingerprint import (
+    EngineComponent,
+    Fingerprint,
+    FingerprintKind,
+    ModelComponent,
+    compute_fingerprint,
+    compute_task_fingerprint,
+)
 from studio.domain.graph import topological_order
 from studio.domain.ids import (
     ROLE_RE,
@@ -30,8 +39,17 @@ from studio.domain.ids import (
     check_unique_ids,
 )
 from studio.domain.production import CreativeSpec, ExecutionSpec
-from studio.domain.recovery import DEFAULT_MAX_INFRASTRUCTURE_RETRIES, AttemptOrigin, ErrorClass
+from studio.domain.recovery import (
+    AttemptEndCause,
+    AttemptInitiator,
+    AttemptOrigin,
+    ErrorClass,
+    JobFailure,
+    RecoveryPolicySnapshot,
+)
 from studio.domain.states import (
+    ATTEMPT_TRANSITIONS,
+    JOB_TRANSITIONS,
     RESOLVED_REQUIRED_JOB_STATES,
     ApprovalState,
     AttemptState,
@@ -56,9 +74,14 @@ def _check_aware(value: datetime | None, path: str) -> None:
 class TaskSpec:
     """One unit of work for one capability: a ``CreativeSpec`` plus an ``ExecutionSpec``.
 
-    Only ``creative`` is fingerprinted. ``creative.binding_id`` names the registry binding (capability);
-    the domain never looks it up. A task is *resolved* (``is_resolved``) when its seed, capability and
-    references are fixed; the architecture requires that before the first attempt.
+    The creative spec alone makes the identity (``identity_hash``, drives approval staleness); the task
+    fingerprint adds the execution parameters, models, template and engine (drives reproduction and caching).
+    ``creative.binding_id`` names the registry binding (capability); the domain never looks it up. A task is
+    *resolved* (``is_resolved``) when its seed, capability and references are fixed; the architecture requires
+    that before the first attempt.
+
+    ``execution_only_reserved`` is the set of reserved creative fields (``width``, ``height``, ``duration_s``)
+    that the binding declares execution-only (UD-6); the registry list is passed in by the caller.
     """
 
     creative: CreativeSpec
@@ -68,10 +91,41 @@ class TaskSpec:
     def is_resolved(self) -> bool:
         return self.creative.is_resolved
 
-    def fingerprint_input(self) -> dict[str, Any]:
-        """The structure a later milestone hashes into ``spec_hash``: resolved creative spec only.
-        Raises ``UnresolvedSpecError`` when not resolved. Execution parameters are excluded by design."""
-        return self.creative.canonical_form(resolved=True)
+    def identity_payload(self, *, execution_only_reserved: Collection[str] = ()) -> dict[str, Any]:
+        """Payload of the creative identity hash. Raises ``UnresolvedSpecError`` when not resolved."""
+        return self.creative.identity_payload(execution_only_reserved=execution_only_reserved)
+
+    def execution_payload(self, *, execution_only_reserved: Collection[str] = ()) -> dict[str, Any]:
+        """The execution component of the task fingerprint: the execution parameters plus the reserved
+        creative fields that the binding declared execution-only (moved out of the identity)."""
+        return {
+            "parameters": self.execution.parameters,
+            "reserved": self.creative.execution_reserved_values(execution_only_reserved),
+        }
+
+    def identity_fingerprint(self, *, execution_only_reserved: Collection[str] = ()) -> Fingerprint:
+        return compute_fingerprint(
+            FingerprintKind.CREATIVE_IDENTITY,
+            self.identity_payload(execution_only_reserved=execution_only_reserved),
+        )
+
+    def task_fingerprint(
+        self,
+        *,
+        models: Iterable[ModelComponent],
+        template_sha256: str | None,
+        engine: EngineComponent,
+        execution_only_reserved: Collection[str] = (),
+    ) -> Fingerprint:
+        """Identity, execution, models, template and engine as one fingerprint (``complete`` only if every
+        component is known)."""
+        return compute_task_fingerprint(
+            identity=self.identity_fingerprint(execution_only_reserved=execution_only_reserved),
+            execution=self.execution_payload(execution_only_reserved=execution_only_reserved),
+            models=models,
+            template_sha256=template_sha256,
+            engine=engine,
+        )
 
 
 # ---------------------------------------------------------------- jobs and attempts
@@ -81,8 +135,10 @@ class TaskSpec:
 class Job:
     """A schedulable unit: execute one task, optionally producing a take. Its attempts are separate records.
 
-    ``max_infrastructure_retries`` bounds attempt-level recovery (infrastructure retry and resume) and is
-    provisional (docs/architecture.md section 5).
+    ``recovery_policy`` is the snapshot of the recovery limits taken when the job was created. It is required
+    and has no default: with ``RecoveryPolicySnapshot.no_automatic_recovery()`` nothing is retried or resumed
+    automatically (UD-7). ``failure`` records why a job failed without a failing attempt (admission refusal);
+    see ``studio.domain.recovery.permitted_take_recovery``.
     """
 
     job_id: JobId
@@ -90,21 +146,33 @@ class Job:
     task: TaskSpec
     state: JobState = JobState.QUEUED
     take_id: TakeId | None = None  # at most one job per take
-    spec_hash: str | None = None  # persisted with the resolved task
-    max_infrastructure_retries: int = DEFAULT_MAX_INFRASTRUCTURE_RETRIES
+    identity_hash: Fingerprint | None = None  # persisted with the resolved task
+    task_fingerprint: Fingerprint | None = None  # persisted with the resolved task
+    recovery_policy: RecoveryPolicySnapshot
+    failure: JobFailure | None = None
 
     def __post_init__(self) -> None:
         check_id(self.job_id, "job.job_id")
         check_id(self.project_id, "job.project_id")
         check_optional_id(self.take_id, "job.take_id")
-        if self.spec_hash is not None:
-            check_sha256(self.spec_hash, "job.spec_hash")
-        if (
-            isinstance(self.max_infrastructure_retries, bool)
-            or not isinstance(self.max_infrastructure_retries, int)
-            or self.max_infrastructure_retries < 0
+        for name, kind in (
+            ("identity_hash", FingerprintKind.CREATIVE_IDENTITY),
+            ("task_fingerprint", FingerprintKind.TASK_FINGERPRINT),
         ):
-            fail("job.retries", "job.max_infrastructure_retries", "must be an integer >= 0")
+            value = getattr(self, name)
+            if value is not None and (not isinstance(value, Fingerprint) or value.kind is not kind):
+                fail(f"job.{name}", f"job.{name}", f"expected a {kind} fingerprint")
+        if not isinstance(self.recovery_policy, RecoveryPolicySnapshot):
+            fail(
+                "job.recovery_policy",
+                "job.recovery_policy",
+                "a recovery policy snapshot is required",
+            )
+        if self.failure is not None:
+            if not isinstance(self.failure, JobFailure):
+                fail("job.failure", "job.failure", "expected a JobFailure")
+            if self.state is not JobState.FAILED:
+                fail("job.failure", "job.failure", "only a failed job carries a failure record")
         if self.state in RESOLVED_REQUIRED_JOB_STATES:
             if not self.task.is_resolved:
                 fail(
@@ -112,23 +180,61 @@ class Job:
                     "job.task",
                     f"a {self.state} job needs a resolved task (seed persisted)",
                 )
-            if self.spec_hash is None:
-                fail("job.spec_hash", "job.spec_hash", f"a {self.state} job needs its spec_hash")
+            if self.identity_hash is None or self.task_fingerprint is None:
+                fail(
+                    "job.fingerprints",
+                    "job.identity_hash",
+                    f"a {self.state} job needs its identity_hash and task_fingerprint",
+                )
+
+
+# Attempt states that imply the engine began work, so ``started_at`` is required (see ``Attempt``).
+_ENGINE_RAN_STATES = frozenset(
+    {
+        AttemptState.RUNNING,
+        AttemptState.INGESTING,
+        AttemptState.SUCCEEDED,
+        AttemptState.FAILED,
+    }
+)
 
 
 @dataclass(frozen=True, kw_only=True)
 class Attempt:
-    """One execution try of a job. Created by infrastructure-level events only (first run, retry, resume)."""
+    """One execution try of a job. Created by infrastructure-level events only (first run, retry, resume,
+    or a human manual restart).
+
+    A failed or interrupted attempt says who ended it (``cause``): only an ENGINE-side end consumes the
+    recovery budget, and only STUDIO_PROCESS/HOST_RESTART interruptions of a started attempt count toward the
+    crash-loop breaker. An INTERRUPTED attempt carries the time it was interrupted in ``finished_at``.
+    ``artifact_version_ids`` lists intermediate, resumable stage artifacts (terminal states only);
+    a RESUME attempt pins the reused artifact's bytes in ``resume_artifact_sha256``.
+
+    ``started_at`` is the moment the engine began, and it decides what an interruption means (an attempt that
+    never started is not a recovery event). The rule per state:
+
+    * PENDING: forbidden (nothing has run yet);
+    * RUNNING, INGESTING, SUCCEEDED, FAILED: required (the engine ran). A failure at launch, the table edge
+      PENDING -> FAILED, therefore stamps ``started_at`` when it fails;
+    * INTERRUPTED: optional, and ``None`` means *never started* (an ENGINE cause still requires it);
+    * CANCELED: optional.
+    """
 
     attempt_id: AttemptId
     job_id: JobId
     number: int  # 1-based, contiguous within the job
+    initiated_by: AttemptInitiator
     state: AttemptState = AttemptState.PENDING
     origin: AttemptOrigin = AttemptOrigin.INITIAL
+    initiated_by_name: str | None = None  # HUMAN only
     previous_attempt_id: AttemptId | None = None
-    resume_artifact_version_id: VersionId | None = None  # the reused stage-1 artifact (RESUME only)
+    resume_artifact_version_id: VersionId | None = None  # the reused stage artifact (RESUME only)
+    resume_artifact_sha256: str | None = None  # RESUME only: pins the reused artifact's bytes
     error_class: ErrorClass | None = None
+    cause: AttemptEndCause | None = None  # required iff FAILED or INTERRUPTED
     output_version_ids: tuple[VersionId, ...] = ()
+    artifact_version_ids: tuple[VersionId, ...] = ()  # intermediate resumable artifacts
+    interrupted_boot_id: str | None = None  # set by startup marking
     started_at: datetime | None = None
     finished_at: datetime | None = None
 
@@ -144,10 +250,34 @@ class Attempt:
             "output_version_ids",
             check_unique_ids(self.output_version_ids, "attempt.output_version_ids"),
         )
+        _set(
+            self,
+            "artifact_version_ids",
+            check_unique_ids(self.artifact_version_ids, "attempt.artifact_version_ids"),
+        )
+        if set(self.output_version_ids) & set(self.artifact_version_ids):
+            fail(
+                "attempt.artifacts",
+                "attempt.artifact_version_ids",
+                "an output is not also an intermediate artifact",
+            )
         _check_aware(self.started_at, "attempt.started_at")
         _check_aware(self.finished_at, "attempt.finished_at")
         if self.started_at and self.finished_at and self.finished_at < self.started_at:
             fail("attempt.time", "attempt.finished_at", "finished before it started")
+        if self.state is AttemptState.PENDING:
+            if self.started_at is not None:
+                fail(
+                    "attempt.started_forbidden",
+                    "attempt.started_at",
+                    "a pending attempt has not started",
+                )
+        elif self.state in _ENGINE_RAN_STATES and self.started_at is None:
+            fail(
+                "attempt.started_required",
+                "attempt.started_at",
+                f"a {self.state} attempt records when it started",
+            )
 
         if self.origin is AttemptOrigin.INITIAL:
             if self.number != 1 or self.previous_attempt_id is not None:
@@ -157,7 +287,7 @@ class Attempt:
                     "the initial attempt is number 1 with no predecessor",
                 )
         else:
-            if self.number < 2 or self.previous_attempt_id is None:
+            if self.number <= 1 or self.previous_attempt_id is None:
                 fail(
                     "attempt.origin", "attempt.origin", f"{self.origin} follows an earlier attempt"
                 )
@@ -167,18 +297,50 @@ class Attempt:
                     "attempt.previous_attempt_id",
                     "an attempt cannot follow itself",
                 )
+
+        human = self.origin is AttemptOrigin.MANUAL_RESTART
+        if human != (self.initiated_by is AttemptInitiator.HUMAN):
+            fail(
+                "attempt.initiator",
+                "attempt.initiated_by",
+                "a manual restart is initiated by a human, every other origin automatically",
+            )
+        if human:
+            if self.initiated_by_name is None:
+                fail(
+                    "attempt.initiator",
+                    "attempt.initiated_by_name",
+                    "a human-initiated attempt names the person",
+                )
+            check_text(self.initiated_by_name, "attempt.initiated_by_name")
+        elif self.initiated_by_name is not None:
+            fail(
+                "attempt.initiator",
+                "attempt.initiated_by_name",
+                "only a human-initiated attempt names a person",
+            )
+
         if self.origin is AttemptOrigin.RESUME:
-            if self.resume_artifact_version_id is None:
+            if self.resume_artifact_version_id is None or self.resume_artifact_sha256 is None:
                 fail(
                     "attempt.resume",
                     "attempt.resume_artifact_version_id",
-                    "resume needs the reused artifact",
+                    "resume needs the reused artifact and its pinned hash",
                 )
-        elif self.resume_artifact_version_id is not None:
+            check_sha256(self.resume_artifact_sha256, "attempt.resume_artifact_sha256")
+        elif self.resume_artifact_version_id is not None or self.resume_artifact_sha256 is not None:
             fail(
                 "attempt.resume",
                 "attempt.resume_artifact_version_id",
                 "only a resume attempt reuses an artifact",
+            )
+
+        terminal = ATTEMPT_TRANSITIONS.is_terminal(self.state)
+        if self.artifact_version_ids and not terminal:
+            fail(
+                "attempt.artifacts",
+                "attempt.artifact_version_ids",
+                "intermediate artifacts are recorded when the attempt ends",
             )
 
         if self.state is AttemptState.FAILED and self.error_class is None:
@@ -194,6 +356,36 @@ class Attempt:
                 "attempt.error_class",
                 "only failed/interrupted attempts carry one",
             )
+
+        ended_badly = self.state in (AttemptState.FAILED, AttemptState.INTERRUPTED)
+        if ended_badly and self.cause is None:
+            fail("attempt.cause", "attempt.cause", f"a {self.state} attempt needs its cause")
+        if not ended_badly and self.cause is not None:
+            fail("attempt.cause", "attempt.cause", "only failed/interrupted attempts have a cause")
+        if self.state is AttemptState.FAILED and self.cause is not AttemptEndCause.ENGINE:
+            fail("attempt.cause", "attempt.cause", "a failed attempt failed on the engine side")
+        if self.state is AttemptState.INTERRUPTED:
+            if self.finished_at is None:
+                fail(
+                    "attempt.interrupted_time",
+                    "attempt.finished_at",
+                    "an interrupted attempt records when it was interrupted",
+                )
+            if self.started_at is None and self.cause is AttemptEndCause.ENGINE:
+                fail(
+                    "attempt.cause_unstarted",
+                    "attempt.cause",
+                    "an attempt that never started cannot have been ended by the engine",
+                )
+        if self.interrupted_boot_id is not None:
+            if self.state is not AttemptState.INTERRUPTED:
+                fail(
+                    "attempt.boot",
+                    "attempt.interrupted_boot_id",
+                    "only an interrupted attempt has an interrupting boot",
+                )
+            check_text(self.interrupted_boot_id, "attempt.interrupted_boot_id")
+
         if self.state is AttemptState.SUCCEEDED and not self.output_version_ids:
             fail(
                 "attempt.outputs",
@@ -205,6 +397,26 @@ class Attempt:
                 "attempt.outputs",
                 "attempt.output_version_ids",
                 "only a succeeded attempt has outputs",
+            )
+
+
+def check_job_transition(
+    source: JobState, target: JobState, *, failure: JobFailure | None = None
+) -> None:
+    """Table check plus the failure rule: a job that fails while ``WAITING_RESOURCES`` (permanently
+    inadmissible) has no attempt and no error class, so it needs a ``JobFailure`` of class RESOURCE
+    that names the admission refusal."""
+    JOB_TRANSITIONS.require_transition(source, target)
+    if source is JobState.WAITING_RESOURCES and target is JobState.FAILED:
+        if (
+            failure is None
+            or failure.error_class is not ErrorClass.RESOURCE
+            or failure.refusal is None
+        ):
+            fail(
+                "job.failure_required",
+                "job.failure",
+                "failing from waiting_resources needs a RESOURCE failure with an admission refusal",
             )
 
 

@@ -1,0 +1,1022 @@
+{
+  "canonical_version": 2,
+  "alg": "sha256",
+  "note": "canonical_bytes are hand-written. digest_python = hashlib.sha256 of those bytes; digest_sha256sum = sha256sum of the .bin file written to E:\\AI_VIDEO_STUDIO\\logs\\b08. Both are recorded and must be equal.",
+  "vectors": [
+    {
+      "id": 8,
+      "title": "-0.0 serializes as 0",
+      "cases": [
+        {
+          "label": "negative zero",
+          "input": {
+            "type": "value",
+            "value": {
+              "zero": -0.0
+            }
+          },
+          "canonical_bytes": "{\"zero\":0}",
+          "bin": "v08.bin",
+          "digest_python": "33b50e61094f0d59aabcdd47c698ea5d9d120c188b8a49f6451ebc736e28ba45",
+          "digest_sha256sum": "33b50e61094f0d59aabcdd47c698ea5d9d120c188b8a49f6451ebc736e28ba45"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Floats 1e21, 1e-7, 0.1, 100.0 use the JCS number text",
+      "cases": [
+        {
+          "label": "four floats in one object",
+          "input": {
+            "type": "value",
+            "value": {
+              "a": 1e+21,
+              "b": 1e-07,
+              "c": 0.1,
+              "d": 100.0
+            }
+          },
+          "canonical_bytes": "{\"a\":1e+21,\"b\":1e-7,\"c\":0.1,\"d\":100}",
+          "bin": "v10_01.bin",
+          "digest_python": "e8e870ac281d9409d12a6b97e9b6c0fbc6c34921e070f9a02876492f0f92d593",
+          "digest_sha256sum": "e8e870ac281d9409d12a6b97e9b6c0fbc6c34921e070f9a02876492f0f92d593"
+        },
+        {
+          "label": "largest plain integer text below 1e21",
+          "input": {
+            "type": "value",
+            "value": {
+              "x": 1e+20
+            }
+          },
+          "canonical_bytes": "{\"x\":100000000000000000000}",
+          "bin": "v10_02.bin",
+          "digest_python": "356acd219b8c369fc389513fb5c3f9fc2977fff3c432bab9df5b1e3a2800b072",
+          "digest_sha256sum": "356acd219b8c369fc389513fb5c3f9fc2977fff3c432bab9df5b1e3a2800b072"
+        },
+        {
+          "label": "smallest plain decimal text (1e-6)",
+          "input": {
+            "type": "value",
+            "value": {
+              "x": 1e-06
+            }
+          },
+          "canonical_bytes": "{\"x\":0.000001}",
+          "bin": "v10_03.bin",
+          "digest_python": "2d6412ab0155bb89d63b73dbf83334b26b39d03e8c832cc253c6a6caceba9733",
+          "digest_sha256sum": "2d6412ab0155bb89d63b73dbf83334b26b39d03e8c832cc253c6a6caceba9733"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "RFC 8785 Appendix B number samples (serialization only)",
+      "cases": [
+        {
+          "label": "rfc8785-appendix-b 0000000000000000",
+          "input": {
+            "type": "float_hex",
+            "hex": "0000000000000000"
+          },
+          "canonical_bytes": "0",
+          "bin": "v14_01.bin",
+          "digest_python": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+          "digest_sha256sum": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+          "derivation": {
+            "rule": "zero (minus zero prints 0)"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b 8000000000000000",
+          "input": {
+            "type": "float_hex",
+            "hex": "8000000000000000"
+          },
+          "canonical_bytes": "0",
+          "bin": "v14_02.bin",
+          "digest_python": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+          "digest_sha256sum": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+          "derivation": {
+            "rule": "zero (minus zero prints 0)"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b 0000000000000001",
+          "input": {
+            "type": "float_hex",
+            "hex": "0000000000000001"
+          },
+          "canonical_bytes": "5e-324",
+          "bin": "v14_03.bin",
+          "digest_python": "c46e7ca1be4c8734f373a56530787288fa2058d73d07855e9247e949f811a42a",
+          "digest_sha256sum": "c46e7ca1be4c8734f373a56530787288fa2058d73d07855e9247e949f811a42a",
+          "derivation": {
+            "digits": "5",
+            "k": 1,
+            "n": -323,
+            "rule": "exponent form"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b 8000000000000001",
+          "input": {
+            "type": "float_hex",
+            "hex": "8000000000000001"
+          },
+          "canonical_bytes": "-5e-324",
+          "bin": "v14_04.bin",
+          "digest_python": "046f4049d09944fcb2efbf2ddb0ea8f05e0204591d6d02c9106efc88190fa7f9",
+          "digest_sha256sum": "046f4049d09944fcb2efbf2ddb0ea8f05e0204591d6d02c9106efc88190fa7f9",
+          "derivation": {
+            "digits": "5",
+            "k": 1,
+            "n": -323,
+            "rule": "exponent form"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b 7fefffffffffffff",
+          "input": {
+            "type": "float_hex",
+            "hex": "7fefffffffffffff"
+          },
+          "canonical_bytes": "1.7976931348623157e+308",
+          "bin": "v14_05.bin",
+          "digest_python": "c2784e1abd6317452708f3fbf9641c16b959561bc621a1d408c23a20aa2cb585",
+          "digest_sha256sum": "c2784e1abd6317452708f3fbf9641c16b959561bc621a1d408c23a20aa2cb585",
+          "derivation": {
+            "digits": "17976931348623157",
+            "k": 17,
+            "n": 309,
+            "rule": "exponent form"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b ffefffffffffffff",
+          "input": {
+            "type": "float_hex",
+            "hex": "ffefffffffffffff"
+          },
+          "canonical_bytes": "-1.7976931348623157e+308",
+          "bin": "v14_06.bin",
+          "digest_python": "f0347276b171ff0c36491c912285a2833de7313d1a103a4b1be0274bfe7c021f",
+          "digest_sha256sum": "f0347276b171ff0c36491c912285a2833de7313d1a103a4b1be0274bfe7c021f",
+          "derivation": {
+            "digits": "17976931348623157",
+            "k": 17,
+            "n": 309,
+            "rule": "exponent form"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b 4340000000000000",
+          "input": {
+            "type": "float_hex",
+            "hex": "4340000000000000"
+          },
+          "canonical_bytes": "9007199254740992",
+          "bin": "v14_07.bin",
+          "digest_python": "c681da39d7273a6a24c15c9cac3a75526ff2ecf8ba4ee60346a0c70c8163bdb2",
+          "digest_sha256sum": "c681da39d7273a6a24c15c9cac3a75526ff2ecf8ba4ee60346a0c70c8163bdb2",
+          "derivation": {
+            "digits": "9007199254740992",
+            "k": 16,
+            "n": 16,
+            "rule": "integer: k <= n <= 21"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b c340000000000000",
+          "input": {
+            "type": "float_hex",
+            "hex": "c340000000000000"
+          },
+          "canonical_bytes": "-9007199254740992",
+          "bin": "v14_08.bin",
+          "digest_python": "83e109bfd7fb4984b47a46f363627c18dbbd7e57e36b05a04cd162d304df72e9",
+          "digest_sha256sum": "83e109bfd7fb4984b47a46f363627c18dbbd7e57e36b05a04cd162d304df72e9",
+          "derivation": {
+            "digits": "9007199254740992",
+            "k": 16,
+            "n": 16,
+            "rule": "integer: k <= n <= 21"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b 4430000000000000",
+          "input": {
+            "type": "float_hex",
+            "hex": "4430000000000000"
+          },
+          "canonical_bytes": "295147905179352830000",
+          "bin": "v14_09.bin",
+          "digest_python": "7933ef1b34c194c7a327ef424e54282dd2872bc7bda27812f9edf7882ca340c0",
+          "digest_sha256sum": "7933ef1b34c194c7a327ef424e54282dd2872bc7bda27812f9edf7882ca340c0",
+          "derivation": {
+            "digits": "29514790517935283",
+            "k": 17,
+            "n": 21,
+            "rule": "integer: k <= n <= 21"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b 44b52d02c7e14af5",
+          "input": {
+            "type": "float_hex",
+            "hex": "44b52d02c7e14af5"
+          },
+          "canonical_bytes": "9.999999999999997e+22",
+          "bin": "v14_10.bin",
+          "digest_python": "143eadc1fc2fe10a563df313c717399d1835652d710fa189119ff2e1d5cde33d",
+          "digest_sha256sum": "143eadc1fc2fe10a563df313c717399d1835652d710fa189119ff2e1d5cde33d",
+          "derivation": {
+            "digits": "9999999999999997",
+            "k": 16,
+            "n": 23,
+            "rule": "exponent form"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b 44b52d02c7e14af6",
+          "input": {
+            "type": "float_hex",
+            "hex": "44b52d02c7e14af6"
+          },
+          "canonical_bytes": "1e+23",
+          "bin": "v14_11.bin",
+          "digest_python": "0b1af6b73e932475817f8eb620deecf21ad7570df3400a23db5c79a9001597f7",
+          "digest_sha256sum": "0b1af6b73e932475817f8eb620deecf21ad7570df3400a23db5c79a9001597f7",
+          "derivation": {
+            "digits": "1",
+            "k": 1,
+            "n": 24,
+            "rule": "exponent form"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b 44b52d02c7e14af7",
+          "input": {
+            "type": "float_hex",
+            "hex": "44b52d02c7e14af7"
+          },
+          "canonical_bytes": "1.0000000000000001e+23",
+          "bin": "v14_12.bin",
+          "digest_python": "de7cb5db5ee06bf7ef5b74ebcf94cd9d7efda28125905f7ff590724953173c7b",
+          "digest_sha256sum": "de7cb5db5ee06bf7ef5b74ebcf94cd9d7efda28125905f7ff590724953173c7b",
+          "derivation": {
+            "digits": "10000000000000001",
+            "k": 17,
+            "n": 24,
+            "rule": "exponent form"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b 444b1ae4d6e2ef4e",
+          "input": {
+            "type": "float_hex",
+            "hex": "444b1ae4d6e2ef4e"
+          },
+          "canonical_bytes": "999999999999999700000",
+          "bin": "v14_13.bin",
+          "digest_python": "dcabf7269f6bb6ec5ba8b9530825cd7ffe215d4dd26e0a237f9d753513792c07",
+          "digest_sha256sum": "dcabf7269f6bb6ec5ba8b9530825cd7ffe215d4dd26e0a237f9d753513792c07",
+          "derivation": {
+            "digits": "9999999999999997",
+            "k": 16,
+            "n": 21,
+            "rule": "integer: k <= n <= 21"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b 444b1ae4d6e2ef4f",
+          "input": {
+            "type": "float_hex",
+            "hex": "444b1ae4d6e2ef4f"
+          },
+          "canonical_bytes": "999999999999999900000",
+          "bin": "v14_14.bin",
+          "digest_python": "914b4f8b4bbe2f6e7c36ad7791fc842a7516d149e694b3a71b78cee465ff6d7a",
+          "digest_sha256sum": "914b4f8b4bbe2f6e7c36ad7791fc842a7516d149e694b3a71b78cee465ff6d7a",
+          "derivation": {
+            "digits": "9999999999999999",
+            "k": 16,
+            "n": 21,
+            "rule": "integer: k <= n <= 21"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b 444b1ae4d6e2ef50",
+          "input": {
+            "type": "float_hex",
+            "hex": "444b1ae4d6e2ef50"
+          },
+          "canonical_bytes": "1e+21",
+          "bin": "v14_15.bin",
+          "digest_python": "241c4643fa70b1dcde1205b71be4e3bebb17e9f880c8e1a33d0ead6c27271d3c",
+          "digest_sha256sum": "241c4643fa70b1dcde1205b71be4e3bebb17e9f880c8e1a33d0ead6c27271d3c",
+          "derivation": {
+            "digits": "1",
+            "k": 1,
+            "n": 22,
+            "rule": "exponent form"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b 3eb0c6f7a0b5ed8c",
+          "input": {
+            "type": "float_hex",
+            "hex": "3eb0c6f7a0b5ed8c"
+          },
+          "canonical_bytes": "9.999999999999997e-7",
+          "bin": "v14_16.bin",
+          "digest_python": "2ace34b29d30d300aeacd4f2bb83367fa186f11a3f02ed461f35f00fd741a242",
+          "digest_sha256sum": "2ace34b29d30d300aeacd4f2bb83367fa186f11a3f02ed461f35f00fd741a242",
+          "derivation": {
+            "digits": "9999999999999997",
+            "k": 16,
+            "n": -6,
+            "rule": "exponent form"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b 3eb0c6f7a0b5ed8d",
+          "input": {
+            "type": "float_hex",
+            "hex": "3eb0c6f7a0b5ed8d"
+          },
+          "canonical_bytes": "0.000001",
+          "bin": "v14_17.bin",
+          "digest_python": "159fb29a827ad04b260aa6c8ab6d8637f8f2b38af5c4f3cb49d6a21205e040f8",
+          "digest_sha256sum": "159fb29a827ad04b260aa6c8ab6d8637f8f2b38af5c4f3cb49d6a21205e040f8",
+          "derivation": {
+            "digits": "1",
+            "k": 1,
+            "n": -5,
+            "rule": "small: -6 < n <= 0"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b 41b3de4355555553",
+          "input": {
+            "type": "float_hex",
+            "hex": "41b3de4355555553"
+          },
+          "canonical_bytes": "333333333.3333332",
+          "bin": "v14_18.bin",
+          "digest_python": "0fdb7bafaf219ccaf278cd0c0a580473db01c774a0baafe72a07d01230ac5c6d",
+          "digest_sha256sum": "0fdb7bafaf219ccaf278cd0c0a580473db01c774a0baafe72a07d01230ac5c6d",
+          "derivation": {
+            "digits": "3333333333333332",
+            "k": 16,
+            "n": 9,
+            "rule": "decimal point inside: 0 < n <= 21"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b 41b3de4355555554",
+          "input": {
+            "type": "float_hex",
+            "hex": "41b3de4355555554"
+          },
+          "canonical_bytes": "333333333.33333325",
+          "bin": "v14_19.bin",
+          "digest_python": "bcbe1777b7d3c91c19c7f90100c595a9b3f1d9b395567da4258baf7ac655d403",
+          "digest_sha256sum": "bcbe1777b7d3c91c19c7f90100c595a9b3f1d9b395567da4258baf7ac655d403",
+          "derivation": {
+            "digits": "33333333333333325",
+            "k": 17,
+            "n": 9,
+            "rule": "decimal point inside: 0 < n <= 21"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b 41b3de4355555555",
+          "input": {
+            "type": "float_hex",
+            "hex": "41b3de4355555555"
+          },
+          "canonical_bytes": "333333333.3333333",
+          "bin": "v14_20.bin",
+          "digest_python": "6bd9be1c141028789cc35db62f1b43e80d5d4ee24d6d542e775deb16799ff4c7",
+          "digest_sha256sum": "6bd9be1c141028789cc35db62f1b43e80d5d4ee24d6d542e775deb16799ff4c7",
+          "derivation": {
+            "digits": "3333333333333333",
+            "k": 16,
+            "n": 9,
+            "rule": "decimal point inside: 0 < n <= 21"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b 41b3de4355555556",
+          "input": {
+            "type": "float_hex",
+            "hex": "41b3de4355555556"
+          },
+          "canonical_bytes": "333333333.3333334",
+          "bin": "v14_21.bin",
+          "digest_python": "1e099031ca0cb3cf4054688f7e2e8c95fc72828de5fa7605ce3f729e6cf79d43",
+          "digest_sha256sum": "1e099031ca0cb3cf4054688f7e2e8c95fc72828de5fa7605ce3f729e6cf79d43",
+          "derivation": {
+            "digits": "3333333333333334",
+            "k": 16,
+            "n": 9,
+            "rule": "decimal point inside: 0 < n <= 21"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b 41b3de4355555557",
+          "input": {
+            "type": "float_hex",
+            "hex": "41b3de4355555557"
+          },
+          "canonical_bytes": "333333333.33333343",
+          "bin": "v14_22.bin",
+          "digest_python": "cf68ab5e198a77538aafd967fb122a305ba1df95c9348b1fe3dff453c7f7215f",
+          "digest_sha256sum": "cf68ab5e198a77538aafd967fb122a305ba1df95c9348b1fe3dff453c7f7215f",
+          "derivation": {
+            "digits": "33333333333333343",
+            "k": 17,
+            "n": 9,
+            "rule": "decimal point inside: 0 < n <= 21"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b becbf647612f3696",
+          "input": {
+            "type": "float_hex",
+            "hex": "becbf647612f3696"
+          },
+          "canonical_bytes": "-0.0000033333333333333333",
+          "bin": "v14_23.bin",
+          "digest_python": "4e703d4e0928e4f339d03e1fb5454ddc33db657ad735b02530d98123b4fd4b61",
+          "digest_sha256sum": "4e703d4e0928e4f339d03e1fb5454ddc33db657ad735b02530d98123b4fd4b61",
+          "derivation": {
+            "digits": "33333333333333333",
+            "k": 17,
+            "n": -5,
+            "rule": "small: -6 < n <= 0"
+          }
+        },
+        {
+          "label": "rfc8785-appendix-b 43143ff3c1cb0959",
+          "input": {
+            "type": "float_hex",
+            "hex": "43143ff3c1cb0959"
+          },
+          "canonical_bytes": "1424953923781206.2",
+          "bin": "v14_24.bin",
+          "digest_python": "e1547479d27f057e3197d49417a1dcbe19dd8781b34fa9f83b789925943d00cb",
+          "digest_sha256sum": "e1547479d27f057e3197d49417a1dcbe19dd8781b34fa9f83b789925943d00cb",
+          "derivation": {
+            "digits": "14249539237812062",
+            "k": 17,
+            "n": 16,
+            "rule": "decimal point inside: 0 < n <= 21"
+          }
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "An unknown model digest makes the task fingerprint incomplete",
+      "cases": [
+        {
+          "label": "model digest and size not recorded -> complete=false",
+          "input": {
+            "type": "task_fingerprint",
+            "identity_digest": "abababababababababababababababababababababababababababababababab",
+            "execution": {
+              "parameters": {},
+              "reserved": {}
+            },
+            "models": [
+              {
+                "model_id": "m.a",
+                "role": "unet",
+                "sha256": null,
+                "size_bytes": null
+              }
+            ],
+            "template": null,
+            "engine": {
+              "engine_id": "e.a",
+              "version": "1.0"
+            }
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"task_fingerprint\",\"payload\":{\"engine\":{\"engine_id\":\"e.a\",\"version\":\"1.0\"},\"execution\":{\"parameters\":{},\"reserved\":{}},\"identity\":\"abababababababababababababababababababababababababababababababab\",\"models\":[{\"model_id\":\"m.a\",\"role\":\"unet\",\"sha256\":null,\"size_bytes\":null}],\"template\":null}}",
+          "bin": "v12_01.bin",
+          "digest_python": "0c4b2ed6f52f657e8a41ab9cb6c020b253ff71cbef4915c17dd2d5a220b2fc99",
+          "digest_sha256sum": "0c4b2ed6f52f657e8a41ab9cb6c020b253ff71cbef4915c17dd2d5a220b2fc99",
+          "complete": false
+        },
+        {
+          "label": "model digest and size recorded -> complete=true",
+          "input": {
+            "type": "task_fingerprint",
+            "identity_digest": "abababababababababababababababababababababababababababababababab",
+            "execution": {
+              "parameters": {},
+              "reserved": {}
+            },
+            "models": [
+              {
+                "model_id": "m.a",
+                "role": "unet",
+                "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+                "size_bytes": 1234
+              }
+            ],
+            "template": null,
+            "engine": {
+              "engine_id": "e.a",
+              "version": "1.0"
+            }
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"task_fingerprint\",\"payload\":{\"engine\":{\"engine_id\":\"e.a\",\"version\":\"1.0\"},\"execution\":{\"parameters\":{},\"reserved\":{}},\"identity\":\"abababababababababababababababababababababababababababababababab\",\"models\":[{\"model_id\":\"m.a\",\"role\":\"unet\",\"sha256\":\"1111111111111111111111111111111111111111111111111111111111111111\",\"size_bytes\":1234}],\"template\":null}}",
+          "bin": "v12_02.bin",
+          "digest_python": "17363b799840af3bc408fe76deebbdb8f2eea882089e915b3f554edfeda3fa3f",
+          "digest_sha256sum": "17363b799840af3bc408fe76deebbdb8f2eea882089e915b3f554edfeda3fa3f",
+          "complete": true
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "The same payload with a different kind gives a different digest",
+      "cases": [
+        {
+          "label": "kind creative_identity",
+          "input": {
+            "type": "envelope",
+            "kind": "creative_identity",
+            "payload": {
+              "a": 1
+            }
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"a\":1}}",
+          "bin": "v13_01.bin",
+          "digest_python": "1e91b932e1696c5c87320de7add00dff890f0c5468462a2214fa0749de7d9424",
+          "digest_sha256sum": "1e91b932e1696c5c87320de7add00dff890f0c5468462a2214fa0749de7d9424"
+        },
+        {
+          "label": "kind task_fingerprint",
+          "input": {
+            "type": "envelope",
+            "kind": "task_fingerprint",
+            "payload": {
+              "a": 1
+            }
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"task_fingerprint\",\"payload\":{\"a\":1}}",
+          "bin": "v13_02.bin",
+          "digest_python": "c3a8f3f2c4616ed1ed651a4f68f9e5dfbef713a0fe421461dcadfd99bf209ce7",
+          "digest_sha256sum": "c3a8f3f2c4616ed1ed651a4f68f9e5dfbef713a0fe421461dcadfd99bf209ce7"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "title": "Minimal resolved T2I spec",
+      "cases": [
+        {
+          "label": "t2i with one free parameter",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "t2i",
+              "binding_id": "cap.t2i",
+              "prompt": "a red apple",
+              "width": 1024,
+              "height": 1024,
+              "seed": 42,
+              "parameters": {
+                "steps": 20
+              }
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.t2i\",\"duration_ms\":null,\"fps\":null,\"height\":1024,\"negative_prompt\":null,\"operation\":\"t2i\",\"parameters\":{\"steps\":20},\"prompt\":\"a red apple\",\"references\":[],\"seed\":\"42\",\"width\":1024}}",
+          "bin": "v01.bin",
+          "digest_python": "ce5c16e695a808f27aa83cb21847acb9d46516eb08e1ed1aba30c1b1cb1bd247",
+          "digest_sha256sum": "ce5c16e695a808f27aa83cb21847acb9d46516eb08e1ed1aba30c1b1cb1bd247"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "fps 24 and fps 24.0 give the same identity",
+      "cases": [
+        {
+          "label": "fps 24 (integer)",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "t2v",
+              "binding_id": "cap.t2v",
+              "prompt": "p",
+              "width": 512,
+              "height": 512,
+              "fps": 24,
+              "duration_s": 2,
+              "seed": 1
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.t2v\",\"duration_ms\":2000,\"fps\":{\"den\":1,\"num\":24},\"height\":512,\"negative_prompt\":null,\"operation\":\"t2v\",\"parameters\":{},\"prompt\":\"p\",\"references\":[],\"seed\":\"1\",\"width\":512}}",
+          "bin": "v02_01.bin",
+          "digest_python": "7ecf596d267c470b00533ceba78d386d103eea780bfce070808efb2ceec44b87",
+          "digest_sha256sum": "7ecf596d267c470b00533ceba78d386d103eea780bfce070808efb2ceec44b87"
+        },
+        {
+          "label": "fps 24.0 (float)",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "t2v",
+              "binding_id": "cap.t2v",
+              "prompt": "p",
+              "width": 512,
+              "height": 512,
+              "fps": 24.0,
+              "duration_s": 2,
+              "seed": 1
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.t2v\",\"duration_ms\":2000,\"fps\":{\"den\":1,\"num\":24},\"height\":512,\"negative_prompt\":null,\"operation\":\"t2v\",\"parameters\":{},\"prompt\":\"p\",\"references\":[],\"seed\":\"1\",\"width\":512}}",
+          "bin": "v02_02.bin",
+          "digest_python": "7ecf596d267c470b00533ceba78d386d103eea780bfce070808efb2ceec44b87",
+          "digest_sha256sum": "7ecf596d267c470b00533ceba78d386d103eea780bfce070808efb2ceec44b87"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "fps \"24000/1001\" is the reduced rational 24000/1001",
+      "cases": [
+        {
+          "label": "fps as text",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "t2v",
+              "binding_id": "cap.t2v",
+              "prompt": "p",
+              "width": 512,
+              "height": 512,
+              "fps": "24000/1001",
+              "duration_s": 2,
+              "seed": 1
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.t2v\",\"duration_ms\":2000,\"fps\":{\"den\":1001,\"num\":24000},\"height\":512,\"negative_prompt\":null,\"operation\":\"t2v\",\"parameters\":{},\"prompt\":\"p\",\"references\":[],\"seed\":\"1\",\"width\":512}}",
+          "bin": "v03.bin",
+          "digest_python": "27cb0ec9edb12d836e3a4a0ed3ca66c1c366e9cde4542a0ca0d8ea153aa58df8",
+          "digest_sha256sum": "27cb0ec9edb12d836e3a4a0ed3ca66c1c366e9cde4542a0ca0d8ea153aa58df8"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "The same references in two orders give the same identity",
+      "cases": [
+        {
+          "label": "authored order reference#1, reference#2, start_frame",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "i2v",
+              "binding_id": "cap.i2v",
+              "prompt": "p",
+              "width": 512,
+              "height": 512,
+              "seed": 7,
+              "references": [
+                {
+                  "role": "reference",
+                  "index": 1,
+                  "asset_id": "asset_a",
+                  "version_id": "ver_a",
+                  "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+                },
+                {
+                  "role": "reference",
+                  "index": 2,
+                  "asset_id": "asset_b",
+                  "version_id": "ver_b",
+                  "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                {
+                  "role": "start_frame",
+                  "index": 1,
+                  "asset_id": "asset_c",
+                  "version_id": "ver_c",
+                  "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+                }
+              ]
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.i2v\",\"duration_ms\":null,\"fps\":null,\"height\":512,\"negative_prompt\":null,\"operation\":\"i2v\",\"parameters\":{},\"prompt\":\"p\",\"references\":[{\"index\":1,\"role\":\"reference\",\"sha256\":\"1111111111111111111111111111111111111111111111111111111111111111\"},{\"index\":2,\"role\":\"reference\",\"sha256\":\"2222222222222222222222222222222222222222222222222222222222222222\"},{\"index\":1,\"role\":\"start_frame\",\"sha256\":\"3333333333333333333333333333333333333333333333333333333333333333\"}],\"seed\":\"7\",\"width\":512}}",
+          "bin": "v04_01.bin",
+          "digest_python": "85bf57c9b84bf909cbf2e64bc94c9ed444f2dc3daf1ef7e0e2de0c41f2ed5fbc",
+          "digest_sha256sum": "85bf57c9b84bf909cbf2e64bc94c9ed444f2dc3daf1ef7e0e2de0c41f2ed5fbc"
+        },
+        {
+          "label": "authored order start_frame, reference#2, reference#1",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "i2v",
+              "binding_id": "cap.i2v",
+              "prompt": "p",
+              "width": 512,
+              "height": 512,
+              "seed": 7,
+              "references": [
+                {
+                  "role": "start_frame",
+                  "index": 1,
+                  "asset_id": "asset_c",
+                  "version_id": "ver_c",
+                  "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+                },
+                {
+                  "role": "reference",
+                  "index": 2,
+                  "asset_id": "asset_b",
+                  "version_id": "ver_b",
+                  "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                {
+                  "role": "reference",
+                  "index": 1,
+                  "asset_id": "asset_a",
+                  "version_id": "ver_a",
+                  "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+                }
+              ]
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.i2v\",\"duration_ms\":null,\"fps\":null,\"height\":512,\"negative_prompt\":null,\"operation\":\"i2v\",\"parameters\":{},\"prompt\":\"p\",\"references\":[{\"index\":1,\"role\":\"reference\",\"sha256\":\"1111111111111111111111111111111111111111111111111111111111111111\"},{\"index\":2,\"role\":\"reference\",\"sha256\":\"2222222222222222222222222222222222222222222222222222222222222222\"},{\"index\":1,\"role\":\"start_frame\",\"sha256\":\"3333333333333333333333333333333333333333333333333333333333333333\"}],\"seed\":\"7\",\"width\":512}}",
+          "bin": "v04_02.bin",
+          "digest_python": "85bf57c9b84bf909cbf2e64bc94c9ed444f2dc3daf1ef7e0e2de0c41f2ed5fbc",
+          "digest_sha256sum": "85bf57c9b84bf909cbf2e64bc94c9ed444f2dc3daf1ef7e0e2de0c41f2ed5fbc"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "A duplicate (role, index) is rejected",
+      "cases": [
+        {
+          "label": "two references with role reference and index 1",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "i2v",
+              "binding_id": "cap.i2v",
+              "prompt": "p",
+              "width": 512,
+              "height": 512,
+              "seed": 7,
+              "references": [
+                {
+                  "role": "reference",
+                  "index": 1,
+                  "asset_id": "asset_a",
+                  "version_id": "ver_a",
+                  "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+                },
+                {
+                  "role": "reference",
+                  "index": 1,
+                  "asset_id": "asset_b",
+                  "version_id": "ver_b",
+                  "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+                }
+              ]
+            },
+            "execution_only_reserved": []
+          },
+          "error": "spec.reference_duplicate"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Seed 2**64-1 is written as a decimal string",
+      "cases": [
+        {
+          "label": "largest seed",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "t2i",
+              "binding_id": "cap.t2i",
+              "prompt": "s",
+              "width": 64,
+              "height": 64,
+              "seed": 18446744073709551615
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.t2i\",\"duration_ms\":null,\"fps\":null,\"height\":64,\"negative_prompt\":null,\"operation\":\"t2i\",\"parameters\":{},\"prompt\":\"s\",\"references\":[],\"seed\":\"18446744073709551615\",\"width\":64}}",
+          "bin": "v06.bin",
+          "digest_python": "5b5fd1d8c4d82b4b62d758ef9f709ba6321ca750d05742b80f634ccb180c48b8",
+          "digest_sha256sum": "5b5fd1d8c4d82b4b62d758ef9f709ba6321ca750d05742b80f634ccb180c48b8"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "A free parameter 2**53 is rejected (2**53-1 is accepted)",
+      "cases": [
+        {
+          "label": "parameter 2**53",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "t2i",
+              "binding_id": "cap.t2i",
+              "prompt": "s",
+              "width": 64,
+              "height": 64,
+              "seed": 3,
+              "parameters": {
+                "big": 9007199254740992
+              }
+            },
+            "execution_only_reserved": []
+          },
+          "error": "canonical.int_range"
+        },
+        {
+          "label": "parameter 2**53-1",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "t2i",
+              "binding_id": "cap.t2i",
+              "prompt": "s",
+              "width": 64,
+              "height": 64,
+              "seed": 3,
+              "parameters": {
+                "big": 9007199254740991
+              }
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.t2i\",\"duration_ms\":null,\"fps\":null,\"height\":64,\"negative_prompt\":null,\"operation\":\"t2i\",\"parameters\":{\"big\":9007199254740991},\"prompt\":\"s\",\"references\":[],\"seed\":\"3\",\"width\":64}}",
+          "bin": "v07_02.bin",
+          "digest_python": "5e9956272002f8480b975f0e087a8ec6d6da5590d718edd53ba51753d06a668b",
+          "digest_sha256sum": "5e9956272002f8480b975f0e087a8ec6d6da5590d718edd53ba51753d06a668b"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Prompt e-acute NFC and NFD are different identities",
+      "cases": [
+        {
+          "label": "NFC U+00E9",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "t2i",
+              "binding_id": "cap.t2i",
+              "prompt": "\u00e9",
+              "width": 64,
+              "height": 64,
+              "seed": 3
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.t2i\",\"duration_ms\":null,\"fps\":null,\"height\":64,\"negative_prompt\":null,\"operation\":\"t2i\",\"parameters\":{},\"prompt\":\"\u00e9\",\"references\":[],\"seed\":\"3\",\"width\":64}}",
+          "bin": "v09_01.bin",
+          "digest_python": "d1dfa8ee646bf7ed2be127e08ee163c60d425864af0059b03be0cc63fdc0eb65",
+          "digest_sha256sum": "d1dfa8ee646bf7ed2be127e08ee163c60d425864af0059b03be0cc63fdc0eb65"
+        },
+        {
+          "label": "NFD U+0065 U+0301",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "t2i",
+              "binding_id": "cap.t2i",
+              "prompt": "e\u0301",
+              "width": 64,
+              "height": 64,
+              "seed": 3
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.t2i\",\"duration_ms\":null,\"fps\":null,\"height\":64,\"negative_prompt\":null,\"operation\":\"t2i\",\"parameters\":{},\"prompt\":\"e\u0301\",\"references\":[],\"seed\":\"3\",\"width\":64}}",
+          "bin": "v09_02.bin",
+          "digest_python": "9dc97f5024dd047438408b3b33bc1b390aec16856b25d80e7423270f8dba48fa",
+          "digest_sha256sum": "9dc97f5024dd047438408b3b33bc1b390aec16856b25d80e7423270f8dba48fa"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "An execution parameter change keeps the identity and changes the task fingerprint",
+      "cases": [
+        {
+          "label": "creative identity of the task (digest is embedded in the next two cases)",
+          "input": {
+            "type": "identity_spec",
+            "spec": {
+              "operation": "t2i",
+              "binding_id": "cap.t2i",
+              "prompt": "q",
+              "width": 64,
+              "height": 64,
+              "seed": 5
+            },
+            "execution_only_reserved": []
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"creative_identity\",\"payload\":{\"capability\":\"cap.t2i\",\"duration_ms\":null,\"fps\":null,\"height\":64,\"negative_prompt\":null,\"operation\":\"t2i\",\"parameters\":{},\"prompt\":\"q\",\"references\":[],\"seed\":\"5\",\"width\":64}}",
+          "bin": "v11_01.bin",
+          "digest_python": "1c62b8a0f8b00c0b7115aef91d832ee932840a82931a7832e9c81f1d03bcae3f",
+          "digest_sha256sum": "1c62b8a0f8b00c0b7115aef91d832ee932840a82931a7832e9c81f1d03bcae3f"
+        },
+        {
+          "label": "task fingerprint, execution offload=true",
+          "input": {
+            "type": "task_spec",
+            "spec": {
+              "operation": "t2i",
+              "binding_id": "cap.t2i",
+              "prompt": "q",
+              "width": 64,
+              "height": 64,
+              "seed": 5
+            },
+            "execution": {
+              "offload": true
+            },
+            "execution_only_reserved": [],
+            "models": [
+              {
+                "model_id": "m.a",
+                "role": "unet",
+                "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+                "size_bytes": 10
+              }
+            ],
+            "template": null,
+            "engine": {
+              "engine_id": "e.a",
+              "version": "1.0"
+            }
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"task_fingerprint\",\"payload\":{\"engine\":{\"engine_id\":\"e.a\",\"version\":\"1.0\"},\"execution\":{\"parameters\":{\"offload\":true},\"reserved\":{}},\"identity\":\"1c62b8a0f8b00c0b7115aef91d832ee932840a82931a7832e9c81f1d03bcae3f\",\"models\":[{\"model_id\":\"m.a\",\"role\":\"unet\",\"sha256\":\"4444444444444444444444444444444444444444444444444444444444444444\",\"size_bytes\":10}],\"template\":null}}",
+          "bin": "v11_02.bin",
+          "digest_python": "decab2fd953a63c828d8c85534709f888504cd54464ff9bb6f0aa035a91b304e",
+          "digest_sha256sum": "decab2fd953a63c828d8c85534709f888504cd54464ff9bb6f0aa035a91b304e"
+        },
+        {
+          "label": "task fingerprint, execution offload=false",
+          "input": {
+            "type": "task_spec",
+            "spec": {
+              "operation": "t2i",
+              "binding_id": "cap.t2i",
+              "prompt": "q",
+              "width": 64,
+              "height": 64,
+              "seed": 5
+            },
+            "execution": {
+              "offload": false
+            },
+            "execution_only_reserved": [],
+            "models": [
+              {
+                "model_id": "m.a",
+                "role": "unet",
+                "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+                "size_bytes": 10
+              }
+            ],
+            "template": null,
+            "engine": {
+              "engine_id": "e.a",
+              "version": "1.0"
+            }
+          },
+          "canonical_bytes": "{\"alg\":\"sha256\",\"canonical_version\":2,\"kind\":\"task_fingerprint\",\"payload\":{\"engine\":{\"engine_id\":\"e.a\",\"version\":\"1.0\"},\"execution\":{\"parameters\":{\"offload\":false},\"reserved\":{}},\"identity\":\"1c62b8a0f8b00c0b7115aef91d832ee932840a82931a7832e9c81f1d03bcae3f\",\"models\":[{\"model_id\":\"m.a\",\"role\":\"unet\",\"sha256\":\"4444444444444444444444444444444444444444444444444444444444444444\",\"size_bytes\":10}],\"template\":null}}",
+          "bin": "v11_03.bin",
+          "digest_python": "caa7943101dc56e895cf177469b0f015e0bf540a762065538af9d1000e5f52f6",
+          "digest_sha256sum": "caa7943101dc56e895cf177469b0f015e0bf540a762065538af9d1000e5f52f6"
+        }
+      ]
+    }
+  ]
+}
