@@ -47,6 +47,8 @@ Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 EnvVarName = Annotated[str, StringConstraints(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$", max_length=128)]
 # One automatic-recovery limit: a non-negative integer, or None for "no automatic recovery of this kind".
 RecoveryLimit = Annotated[int | None, Field(strict=True, ge=0)]
+# The resume-chain cap: when set it is at least 1 (R-9); None = no resume-of-resume. 0 is rejected.
+ResumeDepthLimit = Annotated[int | None, Field(strict=True, ge=1)]
 
 # Parameter names the domain treats as first-class creative fields (they feed the creative identity).
 # Mirrors studio.domain.production.RESERVED_CREATIVE_KEYS plus the design's payload names ``capability``
@@ -303,7 +305,7 @@ class RecoveryPolicy(_Strict):
 
     max_infrastructure_retries: RecoveryLimit = None
     max_resumes: RecoveryLimit = None
-    max_resume_depth: RecoveryLimit = Field(
+    max_resume_depth: ResumeDepthLimit = Field(
         default=None,
         description="cap on a chain of consecutive resumes; None = no resume-of-resume",
     )

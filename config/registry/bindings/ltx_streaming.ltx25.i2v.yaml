@@ -21,7 +21,7 @@ execution_only: [SYNC_S1]   # UNVERIFIED: that SYNC_S1 does not change output
 managed_environment: [TEMP, TMP, HF_HOME]   # set by the executor; never task parameters, never hashed
 resources:
   gpu: exclusive
-  # Memory and duration are UNKNOWN (null), not estimated. Not admissible until measured.
+  # Memory and duration are UNKNOWN (null), not estimated. Not statically compatible until measured.
   vram_gb: {value: null, basis: unknown}
   ram_gb: {value: null, basis: unknown}
   commit_gb: {value: null, basis: unknown}

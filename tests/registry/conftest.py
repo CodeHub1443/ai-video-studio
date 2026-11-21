@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -85,6 +86,14 @@ class Specs:
                     json.dumps(spec), encoding="utf-8"
                 )
         return root
+
+
+@pytest.fixture(autouse=True)
+def _clean_studio_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Registry tests must not see the developer's environment (same rule as tests/config)."""
+    for name in list(os.environ):
+        if name.startswith("STUDIO_"):
+            monkeypatch.delenv(name)
 
 
 @pytest.fixture

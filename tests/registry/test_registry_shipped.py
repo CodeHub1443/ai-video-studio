@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -66,6 +67,18 @@ def test_no_shipped_binding_trips_the_new_loader_checks(shipped: Registry):
         assert not set(b.execution_only) & (
             RESERVED_CREATIVE_FIELDS - EXECUTION_ONLY_CREATIVE_ALLOWLIST
         )
+
+
+def test_no_shipped_binding_file_still_says_admissible():
+    """C-7 / REG-1: the static check is 'statically compatible', not runtime admission (ADR-0007)."""
+    files = sorted((SHIPPED / "bindings").glob("*.yaml"))
+    assert len(files) == 4
+    offenders = [
+        f.name
+        for f in files
+        if re.search(r"\badmissible\b", f.read_text(encoding="utf-8"), re.IGNORECASE)
+    ]
+    assert offenders == []
 
 
 def test_the_shipped_engine_and_model_files_are_unchanged_by_this_brief():

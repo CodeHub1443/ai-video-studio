@@ -12,6 +12,6 @@ determinism: perceptual     # UNVERIFIED: bitwise reproducibility of multithread
 execution_only: [threads]
 resources:
   gpu: none                 # no GPU use by definition; vram is therefore not declared
-  # RAM and commit are hard gates for CPU workloads too: while unknown (null) this binding is NOT admissible.
+  # RAM and commit are hard gates for CPU workloads too: while unknown (null) this binding is NOT statically compatible.
   ram_gb: {value: null, basis: unknown}
   commit_gb: {value: null, basis: unknown}

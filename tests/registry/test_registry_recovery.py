@@ -14,6 +14,7 @@ from studio.registry import (
     BindingSpec,
     EngineSpec,
     RecoveryPolicy,
+    RegistryError,
     ResolvedRecovery,
     load_registry,
 )
@@ -34,9 +35,38 @@ def test_policy_field_names_are_the_shared_contract():
 
 
 @pytest.mark.parametrize("value", [0, 1, 3, 100, None])
-def test_policy_accepts_non_negative_integers_and_none(value: int | None):
-    p = RecoveryPolicy(max_infrastructure_retries=value, max_resumes=value, max_resume_depth=value)
-    assert p.max_resumes == value
+def test_retries_and_resumes_accept_non_negative_integers_and_none(value: int | None):
+    p = RecoveryPolicy(max_infrastructure_retries=value, max_resumes=value)
+    assert (p.max_infrastructure_retries, p.max_resumes) == (value, value)
+
+
+@pytest.mark.parametrize("value", [1, 2, 3, 100, None])
+def test_resume_depth_accepts_one_or_more_and_none(value: int | None):
+    assert RecoveryPolicy(max_resume_depth=value).max_resume_depth == value
+
+
+@pytest.mark.parametrize("value", [0, -1])
+def test_r9_resume_depth_below_one_is_rejected(value: int):
+    with pytest.raises(ValidationError):
+        RecoveryPolicy(max_resume_depth=value)
+
+
+def test_r9_zero_is_still_valid_for_retries_and_resumes_but_not_for_depth():
+    assert RecoveryPolicy(max_infrastructure_retries=0, max_resumes=0).max_resumes == 0
+    with pytest.raises(ValidationError):
+        RecoveryPolicy(max_resumes=0, max_resume_depth=0)
+
+
+def test_r9_a_zero_depth_is_refused_when_loading_a_registry(specs: Any, reg_root: Path):
+    for where in ("engine", "binding"):
+        block = {"max_resume_depth": 0}
+        eng = specs.engine(**({"recovery": block} if where == "engine" else {}))
+        bnd = specs.binding(**({"recovery": block} if where == "binding" else {}))
+        with pytest.raises(RegistryError) as info:
+            load_registry(specs.write(reg_root / where, engines=[eng], bindings=[bnd]))
+        assert any(
+            i.code == "schema" and "max_resume_depth" in i.subject for i in info.value.issues
+        )
 
 
 @pytest.mark.parametrize("value", [-1, True, False, 1.5, "3", [1]])

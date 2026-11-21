@@ -16,7 +16,7 @@ execution_only: []
 resources:
   gpu: exclusive
   # Resource needs are UNKNOWN (null), not estimated: no calibration run exists (M3.x). While vram_gb,
-  # ram_gb or commit_gb is unknown this binding is NOT admissible (studio.registry.compat). No guesses.
+  # ram_gb or commit_gb is unknown this binding is NOT statically compatible (studio.registry.compat). No guesses.
   vram_gb: {value: null, basis: unknown}
   ram_gb: {value: null, basis: unknown}
   commit_gb: {value: null, basis: unknown}
