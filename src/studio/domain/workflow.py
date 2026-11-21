@@ -188,6 +188,17 @@ class Job:
                 )
 
 
+# Attempt states that imply the engine began work, so ``started_at`` is required (see ``Attempt``).
+_ENGINE_RAN_STATES = frozenset(
+    {
+        AttemptState.RUNNING,
+        AttemptState.INGESTING,
+        AttemptState.SUCCEEDED,
+        AttemptState.FAILED,
+    }
+)
+
+
 @dataclass(frozen=True, kw_only=True)
 class Attempt:
     """One execution try of a job. Created by infrastructure-level events only (first run, retry, resume,
@@ -198,6 +209,15 @@ class Attempt:
     crash-loop breaker. An INTERRUPTED attempt carries the time it was interrupted in ``finished_at``.
     ``artifact_version_ids`` lists intermediate, resumable stage artifacts (terminal states only);
     a RESUME attempt pins the reused artifact's bytes in ``resume_artifact_sha256``.
+
+    ``started_at`` is the moment the engine began, and it decides what an interruption means (an attempt that
+    never started is not a recovery event). The rule per state:
+
+    * PENDING: forbidden (nothing has run yet);
+    * RUNNING, INGESTING, SUCCEEDED, FAILED: required (the engine ran). A failure at launch, the table edge
+      PENDING -> FAILED, therefore stamps ``started_at`` when it fails;
+    * INTERRUPTED: optional, and ``None`` means *never started* (an ENGINE cause still requires it);
+    * CANCELED: optional.
     """
 
     attempt_id: AttemptId
@@ -245,6 +265,19 @@ class Attempt:
         _check_aware(self.finished_at, "attempt.finished_at")
         if self.started_at and self.finished_at and self.finished_at < self.started_at:
             fail("attempt.time", "attempt.finished_at", "finished before it started")
+        if self.state is AttemptState.PENDING:
+            if self.started_at is not None:
+                fail(
+                    "attempt.started_forbidden",
+                    "attempt.started_at",
+                    "a pending attempt has not started",
+                )
+        elif self.state in _ENGINE_RAN_STATES and self.started_at is None:
+            fail(
+                "attempt.started_required",
+                "attempt.started_at",
+                f"a {self.state} attempt records when it started",
+            )
 
         if self.origin is AttemptOrigin.INITIAL:
             if self.number != 1 or self.previous_attempt_id is not None:

@@ -706,6 +706,8 @@ def _check_recovery(s: DomainSnapshot, issues: list[ValidationIssue]) -> None:
                 else by_id.get(attempt.previous_attempt_id)
             )
             if attempt.origin in (AttemptOrigin.INFRASTRUCTURE_RETRY, AttemptOrigin.RESUME):
+                # R-11: R-2 takes precedence over R-3. A user stop forbids every automatic follow-up, even
+                # when the stopped attempt never started; only a human MANUAL_RESTART may follow it.
                 if previous is not None and previous.cause is AttemptEndCause.USER_STOP:
                     _issue(
                         issues,
@@ -714,6 +716,8 @@ def _check_recovery(s: DomainSnapshot, issues: list[ValidationIssue]) -> None:
                         "a user stop is never followed by an automatic retry or resume",
                     )
                 else:
+                    # R-3 (below R-2): the re-dispatch after an attempt that never started is an AUTOMATIC
+                    # attempt with origin INFRASTRUCTURE_RETRY. It is not recovery: no policy limit, no budget.
                     redispatch = (
                         attempt.origin is AttemptOrigin.INFRASTRUCTURE_RETRY
                         and previous is not None

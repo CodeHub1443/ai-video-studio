@@ -241,6 +241,43 @@ def test_interrupted_attempt_records_its_time_and_engine_cause_needs_a_start() -
     assert interrupted(1, ENGINE).cause is ENGINE
 
 
+@pytest.mark.parametrize(
+    "state",
+    [AttemptState.RUNNING, AttemptState.INGESTING, AttemptState.SUCCEEDED, AttemptState.FAILED],
+)
+def test_started_at_is_required_once_the_engine_ran(state: AttemptState) -> None:
+    """B-11 D2: a state that implies the engine ran cannot lack its start time, or a crashed running attempt
+    would look like one that never started and escape the breaker and the budget."""
+    cause = ENGINE if state is AttemptState.FAILED else None
+    with pytest.raises(DomainValidationError) as err:
+        att(1, state, cause=cause, started=False)
+    assert _code(err) == "attempt.started_required"
+    assert att(1, state, cause=cause).started_at is not None
+
+
+def test_a_crashed_running_attempt_without_a_start_time_cannot_exist() -> None:
+    with pytest.raises(DomainValidationError) as err:
+        att(1, AttemptState.RUNNING, started=False)
+    assert _code(err) == "attempt.started_required"
+    with pytest.raises(DomainValidationError) as err2:
+        att(1, AttemptState.INGESTING, started=False)
+    assert _code(err2) == "attempt.started_required"
+
+
+def test_a_pending_attempt_has_not_started() -> None:
+    assert att(1, AttemptState.PENDING).started_at is None
+    with pytest.raises(DomainValidationError) as err:
+        att(1, AttemptState.PENDING, started_at=T0)
+    assert _code(err) == "attempt.started_forbidden"
+
+
+@pytest.mark.parametrize("started", [True, False])
+def test_started_at_is_optional_when_interrupted_or_canceled(started: bool) -> None:
+    for state, cause in ((AttemptState.INTERRUPTED, STUDIO), (AttemptState.CANCELED, None)):
+        attempt = att(1, state, cause=cause, started=started)
+        assert (attempt.started_at is not None) is started
+
+
 def test_initiator_rules() -> None:
     manual = att(2, AttemptState.PENDING, origin=MANUAL)
     assert manual.initiated_by_name == "ada"
@@ -528,6 +565,39 @@ def test_an_attempt_that_never_started_is_not_a_recovery_event() -> None:
     assert "recovery.not_permitted_by_policy" in recovery_codes(
         none, unset_with_resume, (make_version(),)
     )
+
+
+def test_user_stop_before_the_start_still_forbids_an_automatic_follow_up() -> None:
+    """R-11: R-2 outranks R-3. A user-stopped attempt that never started is followed only by a human restart."""
+    generous = make_job(policy(retries=9, resumes=9, depth=9))
+    stopped = interrupted(1, USER, started=False)
+    after_retry = [stopped, att(2, AttemptState.RUNNING, origin=RETRY)]
+    assert recovery_codes(generous, after_retry) == ["recovery.after_user_stop"]
+    resume_rows = [
+        interrupted(1, USER, started=False, artifact_version_ids=("art_1",)),
+        att(2, AttemptState.RUNNING, origin=RESUME),
+    ]
+    assert "recovery.after_user_stop" in recovery_codes(generous, resume_rows, (make_version(),))
+    after_human = [stopped, att(2, AttemptState.RUNNING, origin=MANUAL)]
+    for candidate in (generous, make_job(RecoveryPolicySnapshot.no_automatic_recovery())):
+        assert recovery_codes(candidate, after_human) == []
+
+
+@pytest.mark.parametrize("cause", [STUDIO, HOST])
+def test_redispatch_after_a_never_started_attempt_is_an_automatic_infrastructure_retry(
+    cause: AttemptEndCause,
+) -> None:
+    """R-11: the re-dispatch is an AUTOMATIC attempt with origin INFRASTRUCTURE_RETRY, and it is not recovery."""
+    none = make_job(RecoveryPolicySnapshot.no_automatic_recovery())
+    first = interrupted(1, cause, started=False)
+    second = att(2, AttemptState.RUNNING, origin=RETRY)
+    assert second.origin is AttemptOrigin.INFRASTRUCTURE_RETRY
+    assert second.initiated_by is AttemptInitiator.AUTOMATIC and second.initiated_by_name is None
+    assert recovery_codes(none, [first, second]) == []  # no policy limit needed
+    assert retries_used([first, second]) == 0  # no budget used
+    assert not counts_toward_breaker(first)  # never counted toward the breaker
+    with pytest.raises(DomainValidationError):  # the origin cannot be traded for a human one
+        att(2, AttemptState.RUNNING, origin=MANUAL, initiated_by=AttemptInitiator.AUTOMATIC)
 
 
 def test_manual_restart_is_never_budgeted() -> None:

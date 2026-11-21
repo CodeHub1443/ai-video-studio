@@ -29,7 +29,9 @@ Recovery policy (UD-7, amended)
   count toward the crash-loop breaker. ``USER_STOP`` consumes none, does not count toward the breaker, and is
   never followed by an automatic retry or resume, whatever the policy: only a human ``MANUAL_RESTART``.
 * An attempt interrupted before it started is not a recovery event: an automatic re-dispatch of the job
-  consumes no budget, needs no policy limit and never counts toward the breaker.
+  consumes no budget, needs no policy limit and never counts toward the breaker. That re-dispatch is an
+  AUTOMATIC attempt with origin ``INFRASTRUCTURE_RETRY`` (there is no separate origin for it). R-2 outranks
+  this rule: after a ``USER_STOP`` even a never-started attempt is followed only by a human ``MANUAL_RESTART``.
 * Counters are always derived from persisted attempt rows (``retries_used``, ``resumes_used``), never kept.
 """
 

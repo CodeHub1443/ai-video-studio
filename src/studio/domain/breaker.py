@@ -229,11 +229,18 @@ def startup_interruptions(
     * INTERRUPTED attempts are terminal and never selected again, so applying the result and calling this
       again returns an empty tuple. The caller applies everything in one transaction keyed by ``boot_id``.
 
-    Raises ``DomainValidationError`` if an attempt claims to have started after ``now`` (clock skew).
+    Raises ``DomainValidationError`` (``startup.clock``) if the host booted after ``now`` or an attempt claims
+    to have started after ``now`` (clock skew): the marking would otherwise blame the wrong cause.
     """
     check_text(boot_id, "startup.boot_id")
     _check_aware(host_boot_at, "startup.host_boot_at")
     _check_aware(now, "startup.now")
+    if host_boot_at > now:
+        fail(
+            "startup.clock",
+            "startup.host_boot_at",
+            "the host cannot boot after the time of the marking",
+        )
     rows = sorted(attempts, key=lambda a: (a.job_id, a.number, a.attempt_id))
     result: list[StartupTransition] = []
     pending_jobs: set[str] = set()

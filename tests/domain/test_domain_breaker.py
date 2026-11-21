@@ -26,9 +26,12 @@ from studio.domain.production import CreativeSpec
 from studio.domain.recovery import (
     AttemptEndCause,
     AttemptInitiator,
+    AttemptOrigin,
     ErrorClass,
     RecoveryPolicySnapshot,
+    consumes_budget,
     counts_toward_breaker,
+    retries_used,
 )
 from studio.domain.states import AttemptState, JobState
 from studio.domain.vocab import Operation
@@ -439,6 +442,42 @@ def test_marked_started_attempts_feed_the_breaker_by_interruption_time() -> None
     v = breaker_verdict(marked, [], k=1, window_s=WINDOW, now=NOW)
     assert v.count_in_window == 1 and v.should_trip
     assert v.counted_attempt_ids == ("att_1",)
+
+
+def test_an_interrupted_running_attempt_consumes_no_budget_but_counts_toward_the_breaker() -> None:
+    """B-11 D2: a running attempt always has its start time, so marking it is a counted crash, not a free
+    re-dispatch."""
+    row = live(1, AttemptState.RUNNING, started_ago=timedelta(minutes=10))
+    marked = apply_attempt_interruption(row, interruptions(mark([], [row]))["att_1"])
+    assert marked.started_at is not None
+    assert not consumes_budget(marked)
+    assert counts_toward_breaker(marked)
+    follower = Attempt(
+        attempt_id=AttemptId("att_2"),
+        job_id=JobId("job_1"),
+        number=2,
+        initiated_by=AttemptInitiator.AUTOMATIC,
+        origin=AttemptOrigin.INFRASTRUCTURE_RETRY,
+        previous_attempt_id=AttemptId("att_1"),
+        state=AttemptState.PENDING,
+    )
+    assert retries_used([marked, follower]) == 0
+    assert breaker_verdict([marked], [], k=1, window_s=WINDOW, now=NOW).should_trip
+
+
+def test_a_running_attempt_cannot_lack_its_start_time() -> None:
+    with pytest.raises(DomainValidationError) as err:
+        live(1, AttemptState.RUNNING, started_ago=None)
+    assert _code(err) == "attempt.started_required"
+
+
+def test_the_host_cannot_boot_after_the_marking() -> None:
+    """B-11 C3: host_boot_at later than now would blame the wrong cause."""
+    later = NOW + timedelta(seconds=1)
+    with pytest.raises(DomainValidationError) as err:
+        startup_interruptions([], [], boot_id="boot_1", host_boot_at=later, now=NOW)
+    assert _code(err) == "startup.clock"
+    assert startup_interruptions([], [], boot_id="boot_1", host_boot_at=NOW, now=NOW) == ()
 
 
 def test_clock_skew_and_naive_times_are_rejected() -> None:
