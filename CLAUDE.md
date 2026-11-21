@@ -79,6 +79,7 @@ If a brief conflicts with an accepted ADR or this file, stop and report; do not 
   - E:\AI_VIDEO_STUDIO\envs\studio-dev\Scripts\pyright.exe --pythonpath PY
   - PY -m pytest -p no:cacheprovider   (default addopts exclude the gpu, comfyui and ltx markers)
 - Formatting is owned by ruff format; E501 is not linted.
+- Every ruff invocation, including ruff format on changed files, uses --no-cache (R-7), so no .ruff_cache is created.
 
 ## Stop conditions
 Stop and report the issue, evidence, impact, decision needed and safest next step when:
