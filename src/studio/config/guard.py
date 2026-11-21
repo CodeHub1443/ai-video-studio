@@ -14,16 +14,21 @@ What it enforces, for the STUDIO actor and any operation:
    operation is refused; a READ is refused in studio-owned and engine scopes and allowed in read-only scopes
    (models, LTX weights, assets, where users keep deduplicated hard links), recorded as
    ``Authorization.multi_link`` (ADR-0008 P-2, user decision I-13);
-6. fail closed: when the probe cannot answer (link count or identity unknown) the operation is denied.
+6. fail closed: when the probe cannot answer (existence, reparse state, link count or identity unknown)
+   the operation is denied.
 Any failure raises ``AccessDenied``.
 
-``authorize_child`` authorizes one direct child of an already authorized directory, re-running every check
-for that child. There is deliberately no recursive-delete API: a caller walks with handles and authorizes
-each entry itself.
+``authorize_child`` authorizes one direct child of an already authorized directory. It first revalidates
+the parent (same identity), then re-runs every check for the child. There is deliberately no
+recursive-delete API: a caller walks with handles and authorizes each entry itself.
 
-An ``Authorization`` cannot be forged: it has a private constructor token, is read-only, cannot be
-subclassed, copied or pickled, and ``is_issued`` tells whether ``authorize`` really produced an object.
-Consumers (``revalidate``, ``authorize_child`` and the future file layer) must call ``is_issued``.
+What ``Authorization`` guarantees: it can only be built with a private token held by this module, it
+refuses attribute assignment, subclassing, copying and pickling, and ``is_issued`` is True only for an
+object that ``authorize`` / ``authorize_child`` produced and whose fields still equal the values recorded
+at issue time (so a rewrite through ``object.__setattr__`` or a slot descriptor is detected). What it does
+NOT guarantee: protection against hostile code in the same process that reaches the private token or the
+private registry; that is outside the threat model. Consumers (``revalidate``, ``authorize_child`` and
+the future file layer) must call ``is_issued``.
 
 TOCTOU: everything above is a CHECK, and the filesystem can change after it. ``Authorization`` is therefore
 a pre-condition, not a lock. The file layer that consumes it (not written yet) MUST follow the protocol in
@@ -37,14 +42,17 @@ from __future__ import annotations
 import os
 from pathlib import Path, PureWindowsPath
 from typing import Any, NoReturn, Protocol
-from weakref import WeakValueDictionary
+from weakref import ref
 
-from studio.config.checks import is_reparse_point
+from studio.config.checks import probe_reparse_point
 from studio.config.paths import PathValidationError, is_within, same_path, validate_segment
 from studio.config.scopes import AccessDenied, AccessPolicy, Actor, FsOp
 
 _ISSUE_TOKEN = object()
-_ISSUED: WeakValueDictionary[int, Authorization] = WeakValueDictionary()
+_FIELDS = ("path", "scope_name", "op", "anchor", "anchor_identity", "multi_link")
+# id(auth) -> (weak reference, values recorded at issue time). The reference's callback drops the entry
+# when the object is collected, so a reused id can never inherit it.
+_ISSUED: dict[int, tuple[ref[Authorization], tuple[Any, ...]]] = {}
 _PARENT_OPS = frozenset({FsOp.WRITE, FsOp.DELETE})
 _CHILD_OPS = frozenset({FsOp.WRITE, FsOp.DELETE, FsOp.MOVE_SOURCE})
 
@@ -52,28 +60,36 @@ _CHILD_OPS = frozenset({FsOp.WRITE, FsOp.DELETE, FsOp.MOVE_SOURCE})
 class FsProbe(Protocol):
     """Read-only filesystem inspection, injectable so the guard can be tested without a real disk.
 
-    ``identity`` and ``link_count`` return ``None`` when the probe could not determine the answer; the
-    guard treats that as a denial, never as a default.
+    ``lexists``, ``is_reparse_point``, ``identity`` and ``link_count`` return ``None`` when the probe could
+    not determine the answer (an error other than plain absence); the guard treats that as a denial,
+    never as a default.
     """
 
-    def lexists(self, path: str) -> bool: ...
+    def lexists(self, path: str) -> bool | None: ...
     def realpath(self, path: str) -> str: ...
-    def is_reparse_point(self, path: str) -> bool: ...
+    def is_reparse_point(self, path: str) -> bool | None: ...
     def identity(self, path: str) -> tuple[int, int] | None: ...
     def link_count(self, path: str) -> int | None: ...
 
 
 class OsProbe:
-    """Default probe: ``os.path.lexists``, ``os.path.realpath``, ``lstat`` and ``stat``. Writes nothing."""
+    """Default probe: ``lstat``, ``os.path.realpath`` and ``stat``. Writes nothing."""
 
-    def lexists(self, path: str) -> bool:
-        return os.path.lexists(path)
+    def lexists(self, path: str) -> bool | None:
+        """False only when the path is absent; any other failure is unknown (``None``)."""
+        try:
+            os.lstat(path)
+        except (FileNotFoundError, NotADirectoryError):
+            return False
+        except (OSError, ValueError):
+            return None
+        return True
 
     def realpath(self, path: str) -> str:
         return os.path.realpath(path)
 
-    def is_reparse_point(self, path: str) -> bool:
-        return is_reparse_point(Path(path))
+    def is_reparse_point(self, path: str) -> bool | None:
+        return probe_reparse_point(Path(path))
 
     def identity(self, path: str) -> tuple[int, int] | None:
         try:
@@ -138,7 +154,7 @@ class Authorization:
         }
         for name, value in values.items():
             object.__setattr__(self, name, value)
-        _ISSUED[id(self)] = self
+        _register(self)
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         raise TypeError("Authorization cannot be subclassed")
@@ -168,9 +184,34 @@ class Authorization:
         )
 
 
+def _values(auth: Authorization) -> tuple[Any, ...]:
+    return tuple(getattr(auth, name) for name in _FIELDS)
+
+
+def _register(auth: Authorization) -> None:
+    key = id(auth)
+
+    def drop(dead: ref[Authorization]) -> None:
+        entry = _ISSUED.get(key)
+        if entry is not None and entry[0] is dead:
+            del _ISSUED[key]
+
+    _ISSUED[key] = (ref(auth, drop), _values(auth))
+
+
 def is_issued(auth: object) -> bool:
-    """True only for an object that ``authorize`` / ``authorize_child`` produced in this process."""
-    return isinstance(auth, Authorization) and _ISSUED.get(id(auth)) is auth
+    """True only for an object that ``authorize`` / ``authorize_child`` produced in this process AND whose
+    fields still equal the values recorded when it was issued (same type and equal, field by field)."""
+    if not isinstance(auth, Authorization):
+        return False
+    entry = _ISSUED.get(id(auth))
+    if entry is None or entry[0]() is not auth:
+        return False
+    try:
+        current = _values(auth)
+    except AttributeError:  # a slot was never set or was deleted
+        return False
+    return all(type(a) is type(b) and a == b for a, b in zip(entry[1], current, strict=True))
 
 
 def _issue(
@@ -196,7 +237,10 @@ def _deepest_existing(path: Path, probe: FsProbe) -> Path:
     pw = PureWindowsPath(str(path))
     for i in range(len(pw.parts), 0, -1):
         candidate = Path(*pw.parts[:i])
-        if probe.lexists(str(candidate)):
+        exists = probe.lexists(str(candidate))
+        if exists is None:
+            raise AccessDenied(f"{path}: existence of {candidate} unknown; refusing")
+        if exists:
             return candidate
     raise AccessDenied(f"{path}: not even the drive root exists")
 
@@ -233,8 +277,12 @@ def authorize(
     for i in range(1, len(chain) + 1):
         comp = Path(*chain[:i])
         in_scope = same_path(comp, scope.base) or is_within(comp, scope.base)
-        if (in_scope or same_path(comp, anchor)) and probe.is_reparse_point(str(comp)):
-            raise AccessDenied(f"{target}: {comp} is a symlink/junction/reparse point")
+        if in_scope or same_path(comp, anchor):
+            link = probe.is_reparse_point(str(comp))
+            if link is None:
+                raise AccessDenied(f"{target}: reparse state of {comp} unknown; refusing")
+            if link:
+                raise AccessDenied(f"{target}: {comp} is a symlink/junction/reparse point")
     multi_link = False
     if same_path(anchor, target):  # the target itself exists
         real = probe.realpath(str(target))
@@ -269,9 +317,10 @@ def authorize_child(
 ) -> Authorization:
     """Authorize one DIRECT child of an authorized directory, re-running every check for the child.
 
-    ``parent`` must be a genuine ``Authorization`` for WRITE or DELETE. ``name`` is a single path segment.
-    The child is never inferred from the parent: it goes through the whole of ``authorize``, so a link, an
-    alias, a scope change or a multi-link file below the parent is refused.
+    ``parent`` must be a genuine ``Authorization`` for WRITE or DELETE and is revalidated first (same
+    identity, same scope). ``name`` is a single path segment. The child is never inferred from the parent:
+    it goes through the whole of ``authorize``, so a link, an alias, a scope change or a multi-link file
+    below the parent is refused.
     """
     if not is_issued(parent):
         raise AccessDenied("parent is not an Authorization issued by authorize")
@@ -285,6 +334,7 @@ def authorize_child(
         validate_segment(name)
     except PathValidationError as exc:
         raise AccessDenied(f"invalid child name {name!r}: {exc}") from None
+    parent = revalidate(policy, parent, probe=probe)
     child = authorize(policy, parent.path / name, op, probe=probe)
     if child.scope_name != parent.scope_name:
         raise AccessDenied(f"{child.path}: scope {child.scope_name!r} differs from the parent's")

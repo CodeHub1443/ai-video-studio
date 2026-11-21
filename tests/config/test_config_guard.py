@@ -11,6 +11,7 @@ from pathlib import Path, PureWindowsPath
 
 import pytest
 
+from studio.config.checks import is_reparse_point, probe_reparse_point
 from studio.config.guard import (
     Authorization,
     OsProbe,
@@ -19,7 +20,15 @@ from studio.config.guard import (
     is_issued,
     revalidate,
 )
-from studio.config.scopes import AccessDenied, AccessPolicy, Actor, FsOp, build_access_policy
+from studio.config.scopes import (
+    AccessDenied,
+    AccessPolicy,
+    Actor,
+    FsOp,
+    MatchMode,
+    Scope,
+    build_access_policy,
+)
 from studio.config.settings import PathsConfig
 
 PROJECTS = Path(r"E:\AI_VIDEO_STUDIO\projects")
@@ -43,6 +52,8 @@ class FakeFs:
         self.reparse: set[str] = set()
         self.ids: dict[str, tuple[int, int] | None] = {}
         self.links: dict[str, int | None] = {}
+        self.unknown_exists: set[str] = set()  # lexists cannot answer (None)
+        self.unknown_reparse: set[str] = set()  # is_reparse_point cannot answer (None)
         self._next = 1
 
     def add(self, path: Path | str, *, links: int | None = 1) -> Path:
@@ -56,7 +67,9 @@ class FakeFs:
         self.links[_key(path)] = links
         return Path(str(path))
 
-    def lexists(self, path: str) -> bool:
+    def lexists(self, path: str) -> bool | None:
+        if _key(path) in self.unknown_exists:
+            return None
         return _key(path) in self.nodes
 
     def realpath(self, path: str) -> str:
@@ -68,7 +81,9 @@ class FakeFs:
                 return str(Path(mapped, *pw.parts[i:]))
         return str(path)
 
-    def is_reparse_point(self, path: str) -> bool:
+    def is_reparse_point(self, path: str) -> bool | None:
+        if _key(path) in self.unknown_reparse:
+            return None
         return _key(path) in self.reparse
 
     def identity(self, path: str) -> tuple[int, int] | None:
@@ -513,3 +528,199 @@ def test_g5_child_below_a_reparse_parent_is_refused(policy: AccessPolicy, fs: Fa
 def test_g5_parent_in_a_read_only_scope_is_impossible(policy: AccessPolicy, fs: FakeFs):
     with pytest.raises(AccessDenied):
         authorize(policy, fs.add(MODELS / "d"), FsOp.DELETE, probe=fs)
+
+
+# --- G-5 / C-4: the parent is revalidated, and the child must stay in the parent's scope ---------------
+
+
+def test_c4_authorize_child_revalidates_the_parent(
+    policy: AccessPolicy, fs: FakeFs, parent_dir: Authorization
+):
+    fs.add(PROJECTS / "p1" / "work" / "a.bin")
+    fs.ids[_key(parent_dir.path)] = (9, 99)  # the parent directory was swapped after authorization
+    with pytest.raises(AccessDenied, match="replaced"):
+        authorize_child(policy, parent_dir, "a.bin", FsOp.DELETE, probe=fs)
+
+
+def test_c4_authorize_child_refuses_a_parent_whose_identity_became_unknown(
+    policy: AccessPolicy, fs: FakeFs, parent_dir: Authorization
+):
+    fs.add(PROJECTS / "p1" / "work" / "a.bin")
+    fs.ids[_key(parent_dir.path)] = None
+    with pytest.raises(AccessDenied, match="identity"):
+        authorize_child(policy, parent_dir, "a.bin", FsOp.DELETE, probe=fs)
+
+
+def test_g5_child_in_a_different_scope_than_the_parent_is_refused(fs: FakeFs):
+    base = PROJECTS / "a"
+    outer = Scope("outer", base, MatchMode.SUBTREE, Actor.STUDIO)
+    inner = Scope("inner", base / "inner", MatchMode.SUBTREE, Actor.STUDIO)
+    nested = AccessPolicy(scopes=(inner, outer), deny=())  # the first matching scope wins
+    fs.add(base / "inner")
+    parent = authorize(nested, base, FsOp.DELETE, probe=fs)
+    assert parent.scope_name == "outer"
+    with pytest.raises(AccessDenied, match="differs from the parent's"):
+        authorize_child(nested, parent, "inner", FsOp.DELETE, probe=fs)
+
+
+# --- D-2: a rewritten Authorization is no longer issued ----------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "field, value",
+    [
+        ("path", Path(r"C:\Windows\System32\x.dll")),
+        ("scope_name", "data"),
+        ("op", FsOp.DELETE),
+        ("anchor", PROJECTS),
+        ("anchor_identity", (9, 99)),
+        ("multi_link", True),
+    ],
+)
+def test_d2_rewriting_any_field_with_object_setattr_is_detected(
+    policy: AccessPolicy, fs: FakeFs, real_auth: Authorization, field: str, value: object
+):
+    assert is_issued(real_auth)
+    object.__setattr__(real_auth, field, value)
+    assert not is_issued(real_auth)
+    with pytest.raises(AccessDenied, match="not an Authorization"):
+        revalidate(policy, real_auth, probe=fs)
+
+
+def test_d2_rewriting_a_field_through_the_slot_descriptor_is_detected(real_auth: Authorization):
+    vars(Authorization)["op"].__set__(real_auth, FsOp.DELETE)
+    assert real_auth.op is FsOp.DELETE
+    assert not is_issued(real_auth)
+
+
+def test_d2_a_value_of_another_type_that_compares_equal_is_detected(real_auth: Authorization):
+    object.__setattr__(real_auth, "scope_name", str.__new__(type("S", (str,), {}), "projects"))
+    assert real_auth.scope_name == "projects"
+    assert not is_issued(real_auth)
+
+
+def test_d2_a_deleted_slot_is_not_issued(real_auth: Authorization):
+    vars(Authorization)["path"].__delete__(real_auth)
+    assert not is_issued(real_auth)
+
+
+def test_d2_a_read_parent_rewritten_to_delete_cannot_authorize_children(
+    policy: AccessPolicy, fs: FakeFs
+):
+    parent = authorize(policy, fs.add(PROJECTS / "p1" / "dir"), FsOp.READ, probe=fs)
+    with pytest.raises(AccessDenied, match="not a mutation"):
+        authorize_child(policy, parent, "x.bin", FsOp.DELETE, probe=fs)
+    object.__setattr__(parent, "op", FsOp.DELETE)
+    with pytest.raises(AccessDenied, match="not an Authorization"):
+        authorize_child(policy, parent, "x.bin", FsOp.DELETE, probe=fs)
+
+
+def test_d2_an_unmodified_authorization_stays_issued_after_use(
+    policy: AccessPolicy, fs: FakeFs, real_auth: Authorization
+):
+    assert is_issued(revalidate(policy, real_auth, probe=fs))
+    assert is_issued(real_auth)
+
+
+# --- C-3: probe failures other than absence deny -------------------------------------------------------
+
+
+@pytest.mark.parametrize("which", ["target", "parent"])
+def test_c3_unknown_existence_denies(policy: AccessPolicy, fs: FakeFs, which: str):
+    fs.add(PROJECTS / "p1")
+    target = PROJECTS / "p1" / "new" / "x.bin"
+    fs.unknown_exists.add(_key(target if which == "target" else target.parent))
+    with pytest.raises(AccessDenied, match="existence of .* unknown"):
+        authorize(policy, target, FsOp.WRITE, probe=fs)
+
+
+@pytest.mark.parametrize("op", [FsOp.READ, FsOp.WRITE])
+def test_c3_unknown_reparse_state_denies(policy: AccessPolicy, fs: FakeFs, op: FsOp):
+    target = fs.add(PROJECTS / "p1" / "a.txt")
+    fs.unknown_reparse.add(_key(PROJECTS / "p1"))
+    with pytest.raises(AccessDenied, match="reparse state of .* unknown"):
+        authorize(policy, target, op, probe=fs)
+
+
+def test_c3_unknown_reparse_state_of_the_anchor_itself_denies(policy: AccessPolicy, fs: FakeFs):
+    target = fs.add(PROJECTS / "p1" / "a.txt")
+    fs.unknown_reparse.add(_key(target))
+    with pytest.raises(AccessDenied, match="reparse state of .* unknown"):
+        authorize(policy, target, FsOp.WRITE, probe=fs)
+
+
+def _lstat_raising(monkeypatch: pytest.MonkeyPatch, target: Path, exc: BaseException) -> None:
+    """Make ``os.lstat`` fail for ONE path and delegate for every other path."""
+    real = os.lstat
+
+    def fake(path: str | os.PathLike[str], *args: object, **kwargs: object) -> os.stat_result:
+        if os.fspath(path) == str(target):
+            raise exc
+        return real(path, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(os, "lstat", fake)
+
+
+@pytest.mark.parametrize(
+    "exc, expected",
+    [
+        (FileNotFoundError(2, "gone"), False),
+        (NotADirectoryError(20, "not a directory"), False),
+        (PermissionError(13, "denied"), None),
+        (OSError(22, "invalid"), None),
+        (ValueError("embedded null"), None),
+    ],
+    ids=["not-found", "not-a-directory", "permission", "other-oserror", "valueerror"],
+)
+def test_c3_os_probe_lexists_is_tri_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, exc: BaseException, expected: bool | None
+):
+    target = tmp_path / "t.bin"
+    target.write_bytes(b"x")
+    assert OsProbe().lexists(str(target)) is True
+    _lstat_raising(monkeypatch, target, exc)
+    assert OsProbe().lexists(str(target)) is expected
+    assert OsProbe().lexists(str(tmp_path / "other.bin")) is False  # plain absence stays False
+
+
+@pytest.mark.parametrize(
+    "exc, expected",
+    [
+        (FileNotFoundError(2, "gone"), False),
+        (NotADirectoryError(20, "not a directory"), False),
+        (PermissionError(13, "denied"), None),
+        (OSError(22, "invalid"), None),
+    ],
+    ids=["not-found", "not-a-directory", "permission", "other-oserror"],
+)
+def test_c3_reparse_probe_is_tri_state_but_the_public_check_keeps_its_behaviour(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, exc: BaseException, expected: bool | None
+):
+    target = tmp_path / "t.bin"
+    target.write_bytes(b"x")
+    assert probe_reparse_point(target) is False and is_reparse_point(target) is False
+    _lstat_raising(monkeypatch, target, exc)
+    assert probe_reparse_point(target) is expected
+    assert OsProbe().is_reparse_point(str(target)) is expected
+    assert is_reparse_point(target) is False  # non-guard callers: unchanged (fail-open, tracked)
+
+
+def test_c3_the_guard_denies_when_the_real_probe_cannot_stat_a_component(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    pol = build_access_policy(
+        PathsConfig.model_validate(
+            {
+                "workspace_root": tmp_path / "ws",
+                "ltx_repo": tmp_path / "ltx",
+                "ltx_models": tmp_path / "ltx_models",
+            }
+        )
+    )
+    folder = tmp_path / "ws" / "projects" / "p1"
+    folder.mkdir(parents=True)
+    target = folder / "a.txt"
+    assert is_issued(authorize(pol, target, FsOp.WRITE))  # baseline: the real probe accepts it
+    _lstat_raising(monkeypatch, folder, PermissionError(13, "denied"))
+    with pytest.raises(AccessDenied, match="unknown"):
+        authorize(pol, target, FsOp.WRITE)
