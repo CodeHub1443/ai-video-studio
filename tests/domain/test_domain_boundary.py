@@ -1,4 +1,8 @@
-"""Domain boundary: ``studio.domain`` imports only the standard library and itself."""
+"""Domain boundary: ``studio.domain`` imports only the standard library and itself.
+
+These AST checks are tripwires, not proofs: they see static ``import`` statements and the direct calls named
+below, and miss any other way of reaching a module (a computed name, ``getattr`` on a loaded module, a
+re-export through the standard library). They stop accidents, not a determined bypass."""
 
 from __future__ import annotations
 

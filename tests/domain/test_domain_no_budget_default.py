@@ -1,4 +1,8 @@
-"""UD-4: no shared budget of 2. No symbol, default or literal 2 stands for a budget anywhere in the domain."""
+"""UD-4: no shared budget of 2. No symbol, default or literal 2 stands for a budget anywhere in the domain.
+
+These AST checks are tripwires, not proofs: they catch the obvious regression (a named default, a literal 2
+written next to a budget) and are easy to bypass on purpose, for example by computing the value or by reading
+it from data. The behavioural tests in test_domain_recovery.py are what pin the rule down."""
 
 from __future__ import annotations
 

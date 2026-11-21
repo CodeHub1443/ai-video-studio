@@ -82,7 +82,8 @@ def verdict(interrupts: list[Attempt], events: list[BreakerEvent] | None = None,
 
 
 def event(n: int, kind: BreakerEventKind, at: datetime, **kw: Any) -> BreakerEvent:
-    base: dict[str, Any] = {"event_id": f"ev_{n}", "kind": kind, "at": at}
+    """Event number ``n``: its ``sequence`` is ``n`` unless overridden."""
+    base: dict[str, Any] = {"event_id": f"ev_{n}", "sequence": n, "kind": kind, "at": at}
     if kind is BreakerEventKind.TRIPPED:
         base.update(binding_id="cap.t2i", attempt_ids=("att_1",), k=3, window_s=WINDOW)
     else:
@@ -256,6 +257,72 @@ def test_event_order_in_the_input_does_not_matter() -> None:
         rnd.shuffle(shuffled)
         assert verdict([], shuffled) == expected
     assert expected.tripped and expected.quarantined == {"cap.b"}
+
+
+# ---------------------------------------------------------------- event order (R-10)
+
+TRIP, RESET = BreakerEventKind.TRIPPED, BreakerEventKind.RESET
+
+
+def test_tripped_then_reset_at_one_instant_is_reset() -> None:
+    """The same ``at``: the later sequence wins, whatever the input order."""
+    trip, reset = event(1, TRIP, NOW), event(2, RESET, NOW)
+    for events in ([trip, reset], [reset, trip]):
+        v = verdict([], events)
+        assert v.tripped is False and v.quarantined == {"cap.t2i"}
+
+
+def test_reset_then_tripped_at_one_instant_is_tripped() -> None:
+    reset, trip = event(1, RESET, NOW), event(2, TRIP, NOW)
+    for events in ([reset, trip], [trip, reset]):
+        assert verdict([], events).tripped is True
+
+
+def test_same_instant_ties_decide_the_quarantine_by_sequence_too() -> None:
+    trip = event(1, TRIP, NOW)
+    lift = event(2, BreakerEventKind.QUARANTINE_LIFTED, NOW)
+    retrip = event(3, TRIP, NOW)
+    assert verdict([], [retrip, lift, trip]).quarantined == {"cap.t2i"}
+    assert verdict([], [trip, lift]).quarantined == set()
+    lift_first = event(1, BreakerEventKind.QUARANTINE_LIFTED, NOW)
+    trip_second = event(2, TRIP, NOW)
+    assert verdict([], [trip_second, lift_first]).quarantined == {"cap.t2i"}
+
+
+def test_a_reset_at_the_instant_of_an_interrupt_clears_it() -> None:
+    """Counting is unchanged: an interrupt dated at or before the last reset is cleared."""
+    at_reset = interrupt(1, interrupted_ago=timedelta(minutes=3))
+    reset = event(1, RESET, NOW - timedelta(minutes=3))
+    assert verdict([at_reset], [reset], k=1).count_in_window == 0
+
+
+def test_duplicate_sequences_are_rejected() -> None:
+    a = event(1, TRIP, NOW - timedelta(minutes=2))
+    b = event(2, RESET, NOW - timedelta(minutes=1), sequence=1)
+    with pytest.raises(DomainValidationError) as err:
+        verdict([], [a, b])
+    assert _code(err) == "breaker.sequence_duplicate"
+
+
+def test_an_event_dated_before_its_predecessor_is_rejected() -> None:
+    """Ordering by ``at`` alone would read RESET before TRIPPED here and report "tripped"."""
+    first = event(1, TRIP, NOW - timedelta(minutes=1))
+    second = event(2, RESET, NOW - timedelta(minutes=2))
+    with pytest.raises(DomainValidationError) as err:
+        verdict([], [second, first])
+    assert _code(err) == "breaker.event_order"
+
+
+@pytest.mark.parametrize("bad", [0, -1, True, 1.0, None, 2**53])
+def test_sequence_must_be_a_positive_integer(bad: Any) -> None:
+    with pytest.raises(DomainValidationError) as err:
+        event(1, RESET, NOW, sequence=bad)
+    assert _code(err) == "breaker.sequence"
+
+
+def test_sequence_is_required() -> None:
+    with pytest.raises(TypeError):
+        BreakerEvent(event_id="ev_1", kind=RESET, at=NOW, by_name="ada")  # type: ignore[call-arg]
 
 
 # ---------------------------------------------------------------- event validation

@@ -282,7 +282,9 @@ class RecoveryPolicySnapshot:
 
     ``source`` is ``"none"`` (no policy found: every limit ``None``), ``"binding:<registry id>"`` or
     ``"engine:<registry id>"``. A limit of ``None`` means that kind is never automatic; ``0`` allows no
-    budget-consuming follow-up. ``digest`` fingerprints the snapshot (the "policy version").
+    budget-consuming follow-up. ``max_resume_depth``, when set, is at least 1 (``0`` is rejected: a resume chain
+    is at least one resume long, and ``None`` already means depth 1). ``digest`` fingerprints the snapshot (the
+    "policy version").
     """
 
     source: str
@@ -305,6 +307,12 @@ class RecoveryPolicySnapshot:
             _check_limit(self.max_resumes, "recovery_policy.max_resumes"),
             _check_limit(self.max_resume_depth, "recovery_policy.max_resume_depth"),
         )
+        if self.max_resume_depth is not None and self.max_resume_depth < 1:
+            fail(
+                "policy.resume_depth",
+                "recovery_policy.max_resume_depth",
+                "a resume depth is at least 1, or None (which means depth 1)",
+            )
         if self.source == "none" and any(limit is not None for limit in limits):
             fail("policy.source_none", "recovery_policy", "source 'none' carries no limits")
         object.__setattr__(

@@ -10,12 +10,17 @@ attempt that never started does not count, and engine-side failures consume the 
   and have no default. While ``k`` is ``None`` the breaker fails closed: it behaves as if ``K`` were one, so a
   single counted interrupt pauses the queue; while ``window_s`` is ``None`` the window is unbounded (every
   counted interrupt since the last reset). Neither is a calibrated threshold.
-* State is derived, never stored: append-only ``BreakerEvent`` rows give "tripped" (the last ``TRIPPED`` is later
-  than the last ``RESET``) and the set of quarantined bindings. Only a human resets the breaker or lifts a
+* State is derived, never stored: append-only ``BreakerEvent`` rows give "tripped" (the last ``TRIPPED`` comes
+  after the last ``RESET``) and the set of quarantined bindings. Only a human resets the breaker or lifts a
   quarantine; nothing resets with time.
+* Events are ordered by their ``sequence`` (unique, strictly increasing, assigned by the persistence layer when
+  it appends), never by ``at`` alone: two events may share one instant, and the clock may be coarse. ``at`` must
+  not decrease along the sequence, or the log is rejected (R-10).
 * Startup marking selects attempts that were live when the process died and moves them to ``INTERRUPTED``
   exactly once: an interrupted attempt is terminal and is never selected again, so applying the result and
-  running the function again returns nothing.
+  running the function again returns nothing. This holds only if the persistence layer applies all transitions
+  of one boot atomically (one transaction keyed by ``boot_id``): a partial apply leaves live rows that a second
+  run would mark again, with a later ``finished_at`` (R-12).
 """
 
 from __future__ import annotations
@@ -65,10 +70,12 @@ class BreakerEventKind(StrEnum):
 class BreakerEvent:
     """One append-only breaker event. ``TRIPPED`` is recorded by the scheduler and names the quarantined
     registry binding and the counted interrupts, with the ``k`` and ``window_s`` in force (``None`` = not
-    configured, fail-closed). ``RESET`` and ``QUARANTINE_LIFTED`` are human actions and name the person."""
+    configured, fail-closed). ``RESET`` and ``QUARANTINE_LIFTED`` are human actions and name the person.
+    ``sequence`` (>= 1) is the append order of the log; the verdict folds events in that order (R-10)."""
 
     event_id: BreakerEventId
     kind: BreakerEventKind
+    sequence: int
     at: datetime
     by_name: str | None = None
     binding_id: str | None = None
@@ -78,6 +85,12 @@ class BreakerEvent:
 
     def __post_init__(self) -> None:
         check_id(self.event_id, "breaker.event_id")
+        if (
+            isinstance(self.sequence, bool)
+            or not isinstance(self.sequence, int)
+            or not 1 <= self.sequence <= SAFE_INT_MAX
+        ):
+            fail("breaker.sequence", "breaker.sequence", "must be an integer >= 1")
         _check_aware(self.at, "breaker.at")
         _check_limit(self.k, "breaker.k", "breaker.k")
         _check_limit(self.window_s, "breaker.window_s", "breaker.window_s")
@@ -140,6 +153,10 @@ def breaker_verdict(
     A counted interrupt is an attempt for which ``counts_toward_breaker`` holds, interrupted at ``finished_at``
     with ``now - window_s <= finished_at <= now`` and strictly after the last ``RESET``. The window edges are
     inclusive. Duplicate rows of one attempt count once.
+
+    Events are folded in ``sequence`` order, so a TRIPPED and a RESET that share one ``at`` resolve by which was
+    appended last. A log with a duplicate sequence, or whose ``at`` decreases along the sequence, is rejected
+    (``breaker.sequence_duplicate``, ``breaker.event_order``): the verdict would be a guess.
     """
     _check_aware(now, "breaker.now")
     _check_limit(k, "breaker.k", "breaker.k")
@@ -148,7 +165,21 @@ def breaker_verdict(
     tripped = False
     last_reset: datetime | None = None
     quarantined: set[str] = set()
-    for event in sorted(events, key=lambda e: e.at):
+    ordered_events = sorted(events, key=lambda e: e.sequence)
+    for earlier, later in zip(ordered_events, ordered_events[1:], strict=False):
+        if later.sequence == earlier.sequence:
+            fail(
+                "breaker.sequence_duplicate",
+                f"breaker.events[{later.event_id}]",
+                f"sequence {later.sequence} is used by more than one event",
+            )
+        if later.at < earlier.at:
+            fail(
+                "breaker.event_order",
+                f"breaker.events[{later.event_id}]",
+                "an event appended later is dated earlier than its predecessor",
+            )
+    for event in ordered_events:
         if event.kind is BreakerEventKind.TRIPPED:
             tripped = True
             if event.binding_id is not None:

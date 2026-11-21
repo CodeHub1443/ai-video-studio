@@ -169,6 +169,29 @@ def test_policy_limits_validation() -> None:
     assert policy().permits(RETRY) is False
 
 
+def test_resume_depth_when_set_is_at_least_one() -> None:
+    """R-9: depth 0 is rejected; None means depth 1; the other limits keep their floor of 0."""
+    with pytest.raises(DomainValidationError) as err_negative:
+        policy(resumes=1, depth=-1)
+    assert _code(err_negative) == "policy.limit"
+    with pytest.raises(DomainValidationError) as err0:
+        policy(resumes=1, depth=0)
+    assert _code(err0) == "policy.resume_depth"
+    with pytest.raises(DomainValidationError) as err_none_source:
+        policy(depth=0, source="none")
+    assert _code(err_none_source) == "policy.resume_depth"
+    assert policy(resumes=1, depth=1).max_resume_depth == 1
+    assert policy(resumes=1, depth=None).max_resume_depth is None
+    assert policy(retries=0, resumes=0).max_resumes == 0
+
+
+def test_unset_depth_means_a_single_resume() -> None:
+    """None is depth 1: one resume is fine, a resume of a resume is not (see test_resume_depth_limit)."""
+    rows = [failed(1, artifact_version_ids=("art_1",)), att(2, AttemptState.RUNNING, origin=RESUME)]
+    job = make_job(policy(resumes=1, depth=None))
+    assert recovery_codes(job, rows, (make_version(),)) == []
+
+
 def test_policy_source_rules() -> None:
     none = RecoveryPolicySnapshot.no_automatic_recovery()
     assert none.source == "none"
