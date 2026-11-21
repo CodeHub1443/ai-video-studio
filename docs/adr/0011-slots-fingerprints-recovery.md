@@ -2,9 +2,7 @@
 
 **Status: PROPOSED, awaiting approval.** Nothing in this ADR is accepted. It records the M0.3a domain design
 (docs/design/m0.3a-domain-amendments.md, sections A-D, the frozen design record), amended by user decisions
-UD-7 (amended) and UD-12 (I-1..I-8, I-10..I-13; I-9 superseded by UD-7 amended). Nothing here is merged to
-main. Implementation is in progress on feat/b08-domain-m03a-p1 and feat/b09-config-registry-m03a; this ADR
-records no test results. It cites symbols and design sections, not code lines. It amends no accepted ADR by itself; the proposed amendments to accepted ADRs are in
+UD-7 (amended) and UD-12 (I-1..I-8, I-10..I-13; I-9 superseded by UD-7 amended). Implemented by the M0.3a domain and config/registry changes (branches feat/b08-domain-m03a-p1 and feat/b09-config-registry-m03a). This ADR stays PROPOSED regardless of merge state and records no test results. It cites symbols and design sections, not code lines. It amends no accepted ADR by itself; the proposed amendments to accepted ADRs are in
 [ADR-0009](0009-proposed-amendments-to-accepted-adrs.md). Labels: UD-n are user decisions, I-n are the
 user's resolutions of the design's open questions (UD-12), R-n are planner rulings (R-1..R-5 and R-8..R-12). ADR-0008 (D-n, P-n, U-n)
 and ADR-0010 (P-n, U-n) are separate series and are always named.
@@ -61,8 +59,7 @@ route from an admission refusal to adaptation, and approvals that went stale on 
   of the task fingerprint. `fps` is never adaptable.
 - Task fingerprint payload: identity digest, execution parameters, models (id, role, SHA-256, size; directory
   models by manifest digest), template digest, engine id and version. Managed environment values are excluded.
-  A fingerprint with an unknown component is `complete = false` (a template that is absent, as opposed to
-  unrecorded, counts as known): it is stored but never used for caching,
+  A fingerprint with an unknown component is `complete = false` (a binding that uses a template must always supply its digest; template_sha256 = None means the binding has no template, which counts as known): it is stored but never used for caching,
   deduplication or resume compatibility.
 - Canonical form v2 (`CANONICAL_VERSION = 2`): RFC 8785 (JCS) over a restricted value domain. Integers are limited
   to +-(2^53-1); only the seed is encoded as a decimal string, and every other integer stays within
@@ -128,7 +125,7 @@ ENGINE requires a started attempt.
   limit and never counts toward the breaker.
 - R-11 (planner ruling under UD-7, PROPOSED) R-2 takes precedence over R-3. A re-dispatch after a never-started
   attempt is an AUTOMATIC attempt with origin INFRASTRUCTURE_RETRY. Attempt states that imply the engine ran
-  require `started_at`.
+  require `started_at`. PENDING forbids started_at; RUNNING, INGESTING, SUCCEEDED and FAILED require it; INTERRUPTED and CANCELED may omit it; a launch failure (PENDING -> FAILED) stamps started_at when it fails.
 - R-4 Breaker K and T have no code defaults. Their values live only in `config/studio.toml` (K = 3 interrupts
   within T = 1800 s, provisional: I-8). If the configuration is absent, the breaker fails closed. K and T fail
   closed independently: an absent K is K = 1, and an absent T means an unbounded window (every counted
