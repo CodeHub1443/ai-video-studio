@@ -338,10 +338,15 @@ class BreakerConfig(_Section):
     (``[recovery.breaker]``); there are deliberately no code defaults. While a value is ``None`` the
     consumer must fail closed (treat it as K = 1: any counted interrupt pauses the queue). ``provisional``
     stays true until a calibration run exists.
+
+    Ruling R-8: the values may be set only in the base ``studio.toml`` (or by constructor kwargs).
+    A ``STUDIO_RECOVERY*`` environment variable or a ``recovery`` table in an overlay file is a settings
+    error (see ``StudioSettings.settings_customise_sources``). Values are strict integers: no float or
+    string coercion, and booleans are rejected.
     """
 
-    k: int | None = Field(default=None, ge=1)
-    window_s: int | None = Field(default=None, gt=0)
+    k: int | None = Field(default=None, strict=True, ge=1)
+    window_s: int | None = Field(default=None, strict=True, gt=0)
     provisional: bool = True
 
     @field_validator("k", "window_s", mode="before")
@@ -358,8 +363,45 @@ class RecoveryConfig(_Section):
     breaker: BreakerConfig = Field(default_factory=BreakerConfig)
 
 
+_BREAKER_RULE = "recovery.breaker may be set only in the base studio.toml (ruling R-8)"
+
+
+def _refuse_breaker_in_environment() -> None:
+    """R-8: any ``STUDIO_RECOVERY`` / ``STUDIO_RECOVERY__*`` variable is an error. Names only, no values."""
+    names = sorted(
+        name
+        for name in os.environ
+        if name.upper() == "STUDIO_RECOVERY" or name.upper().startswith("STUDIO_RECOVERY__")
+    )
+    if names:
+        raise ValueError(
+            f"{_BREAKER_RULE}, not by environment variables; remove: {', '.join(names)}"
+        )
+
+
+def _refuse_breaker_in_overlay(overlay: Path) -> None:
+    """R-8: a ``recovery`` table in the environment overlay file is an error (a missing file is fine)."""
+    try:
+        text = overlay.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return
+    if "recovery" in tomllib.loads(text):
+        raise ValueError(f"{_BREAKER_RULE}, not in the overlay file {overlay.name}")
+
+
 class _OverlayToml(TomlConfigSettingsSource):
-    """TOML source that refuses ``env`` so a file can never contradict the selected environment."""
+    """TOML source that refuses ``env`` so a file can never contradict the selected environment, and
+    refuses a ``recovery`` table in the overlay (R-8)."""
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        toml_file: list[Path],
+        *,
+        overlay: Path | None = None,
+    ) -> None:
+        self._overlay = overlay
+        super().__init__(settings_cls, toml_file=toml_file)
 
     def __call__(self) -> dict[str, Any]:
         data = super().__call__()
@@ -367,6 +409,8 @@ class _OverlayToml(TomlConfigSettingsSource):
             raise ValueError(
                 "'env' cannot be set in a TOML file; use STUDIO_ENV or the env= argument"
             )
+        if self._overlay is not None:
+            _refuse_breaker_in_overlay(self._overlay)
         return data
 
 
@@ -451,8 +495,9 @@ class StudioSettings(BaseSettings):
         except ConfigDirNotFound:
             cfg = None  # installed package without STUDIO_CONFIG_DIR: built-in defaults only
         files = [] if cfg is None else [cfg / "studio.toml", cfg / f"studio.{env_name}.toml"]
+        _refuse_breaker_in_environment()
         toml = _OverlayToml(
-            settings_cls, toml_file=files
+            settings_cls, toml_file=files, overlay=files[1] if files else None
         )  # later file wins; missing files are skipped
         return (init_settings, env_settings, toml)
 
